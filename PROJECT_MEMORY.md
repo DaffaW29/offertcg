@@ -21,3 +21,5 @@
   increments, with the default reset target aligned to 70%.
 - Added a vertical scroll area to search results so long card searches remain
   contained inside the results panel.
+- Added paginated card search using 50 results per page with Next/Previous
+  controls and provider response metadata from the Pokemon TCG API.

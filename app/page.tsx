@@ -2,6 +2,8 @@
 
 import Image from "next/image";
 import {
+  ChevronLeft,
+  ChevronRight,
   Download,
   Loader2,
   Plus,
@@ -10,7 +12,7 @@ import {
   Trash2,
   X
 } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   CONDITIONS,
   type CardCondition,
@@ -20,9 +22,11 @@ import {
   suggestedBuyPrice,
   totalPayout
 } from "@/lib/deals";
-import type {
-  CardSearchResult,
-  ProviderSearchResponse
+import {
+  DEFAULT_SEARCH_PAGE,
+  SEARCH_PAGE_SIZE,
+  type CardSearchResult,
+  type ProviderSearchResponse
 } from "@/lib/pricing/types";
 
 const QUICK_PERCENTAGES = [70, 75, 80, 85, 90, 95, 100];
@@ -43,6 +47,27 @@ type ApiErrorResponse = {
   error?: string;
 };
 
+type SearchFilters = {
+  query: string;
+  setName: string;
+  cardNumber: string;
+  rarity: string;
+};
+
+type SearchPagination = {
+  page: number;
+  pageSize: number;
+  count: number;
+  totalCount: number;
+};
+
+const EMPTY_SEARCH_PAGINATION: SearchPagination = {
+  page: DEFAULT_SEARCH_PAGE,
+  pageSize: SEARCH_PAGE_SIZE,
+  count: 0,
+  totalCount: 0
+};
+
 export default function Home() {
   const [query, setQuery] = useState("");
   const [setName, setSetName] = useState("");
@@ -51,6 +76,10 @@ export default function Home() {
   const [addCondition, setAddCondition] =
     useState<CardCondition>("Near Mint");
   const [results, setResults] = useState<CardSearchResult[]>([]);
+  const [activeSearch, setActiveSearch] = useState<SearchFilters | null>(null);
+  const [pagination, setPagination] = useState<SearchPagination>(
+    EMPTY_SEARCH_PAGINATION
+  );
   const [selectedVariants, setSelectedVariants] = useState<
     Record<string, string>
   >({});
@@ -62,6 +91,7 @@ export default function Home() {
   const [globalBuyPercent, setGlobalBuyPercent] =
     useState(DEFAULT_BUY_PERCENT);
   const [hasHydrated, setHasHydrated] = useState(false);
+  const resultListRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const rawDeal = window.localStorage.getItem(STORAGE_KEY);
@@ -99,6 +129,10 @@ export default function Home() {
     );
   }, [cart, globalBuyPercent, hasHydrated]);
 
+  useEffect(() => {
+    resultListRef.current?.scrollTo({ top: 0 });
+  }, [results]);
+
   const totals = useMemo(() => {
     return cart.reduce(
       (summary, item) => {
@@ -111,25 +145,51 @@ export default function Home() {
       { marketValue: 0, payout: 0, quantity: 0 }
     );
   }, [cart]);
+  const totalPages = Math.max(
+    DEFAULT_SEARCH_PAGE,
+    Math.ceil(pagination.totalCount / pagination.pageSize)
+  );
+  const hasPagedResults =
+    hasSearched &&
+    !searchError &&
+    results.length > 0 &&
+    pagination.totalCount > 0;
+  const resultStart = hasPagedResults
+    ? (pagination.page - 1) * pagination.pageSize + 1
+    : 0;
+  const resultEnd = hasPagedResults
+    ? Math.min(resultStart + results.length - 1, pagination.totalCount)
+    : 0;
+  const canGoPrevious =
+    hasPagedResults && pagination.page > DEFAULT_SEARCH_PAGE;
+  const canGoNext = hasPagedResults && pagination.page < totalPages;
 
   async function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const trimmedQuery = query.trim();
+    const filters = toSearchFilters(query, setName, cardNumber, rarity);
 
-    if (trimmedQuery.length < 2) {
+    if (filters.query.length < 2) {
       setSearchError("Enter at least 2 characters to search.");
       return;
     }
 
+    setActiveSearch(filters);
+    await fetchSearchResults(filters, DEFAULT_SEARCH_PAGE);
+  }
+
+  async function fetchSearchResults(filters: SearchFilters, page: number) {
     setIsSearching(true);
     setSearchError("");
     setProviderNotice("");
     setHasSearched(true);
 
-    const params = new URLSearchParams({ q: trimmedQuery });
-    appendOptionalParam(params, "set", setName);
-    appendOptionalParam(params, "number", cardNumber);
-    appendOptionalParam(params, "rarity", rarity);
+    const params = new URLSearchParams({
+      q: filters.query,
+      page: page.toString()
+    });
+    appendOptionalParam(params, "set", filters.setName);
+    appendOptionalParam(params, "number", filters.cardNumber);
+    appendOptionalParam(params, "rarity", filters.rarity);
 
     try {
       const response = await fetch(`/api/cards/search?${params.toString()}`);
@@ -147,6 +207,12 @@ export default function Home() {
 
       const data = payload as ProviderSearchResponse;
       setResults(data.cards);
+      setPagination({
+        page: data.page,
+        pageSize: data.pageSize,
+        count: data.count,
+        totalCount: data.totalCount
+      });
       setProviderNotice(data.message ?? "");
       setSelectedVariants((current) => {
         const next = { ...current };
@@ -159,12 +225,24 @@ export default function Home() {
       });
     } catch (error) {
       setResults([]);
+      setPagination(EMPTY_SEARCH_PAGINATION);
       setSearchError(
         error instanceof Error ? error.message : "Unable to search cards."
       );
     } finally {
       setIsSearching(false);
     }
+  }
+
+  function goToSearchPage(page: number) {
+    if (!activeSearch || isSearching) {
+      return;
+    }
+
+    void fetchSearchResults(
+      activeSearch,
+      Math.min(totalPages, Math.max(DEFAULT_SEARCH_PAGE, page))
+    );
   }
 
   function addCardToCart(card: CardSearchResult) {
@@ -392,7 +470,9 @@ export default function Home() {
               <p className="eyebrow">Search results</p>
               <h2 id="results-heading">Select the exact card</h2>
             </div>
-            <span className="count-pill">{results.length} results</span>
+            <span className="count-pill">
+              {hasSearched ? pagination.totalCount : 0} results
+            </span>
           </div>
 
           {isSearching ? (
@@ -414,7 +494,7 @@ export default function Home() {
             </div>
           ) : null}
 
-          <div className="result-list">
+          <div className="result-list" ref={resultListRef}>
             {results.map((card) => {
               const selectedVariant = getSelectedVariant(
                 card,
@@ -487,6 +567,37 @@ export default function Home() {
               );
             })}
           </div>
+
+          {hasPagedResults ? (
+            <div className="pagination-bar">
+              <span aria-live="polite">
+                Showing {resultStart}-{resultEnd} of {pagination.totalCount}
+              </span>
+              <div className="pagination-controls">
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={() => goToSearchPage(pagination.page - 1)}
+                  disabled={!canGoPrevious || isSearching}
+                >
+                  <ChevronLeft size={16} />
+                  Previous
+                </button>
+                <span>
+                  Page {pagination.page} of {totalPages}
+                </span>
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={() => goToSearchPage(pagination.page + 1)}
+                  disabled={!canGoNext || isSearching}
+                >
+                  Next
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            </div>
+          ) : null}
         </section>
 
         <section className="panel cart-panel" aria-labelledby="cart-heading">
@@ -758,6 +869,20 @@ function getSelectedVariant(card: CardSearchResult, selectedId?: string) {
     card.variants.find((variant) => variant.id === selectedId) ??
     card.variants[0]
   );
+}
+
+function toSearchFilters(
+  query: string,
+  setName: string,
+  cardNumber: string,
+  rarity: string
+): SearchFilters {
+  return {
+    query: query.trim(),
+    setName: setName.trim(),
+    cardNumber: cardNumber.trim(),
+    rarity: rarity.trim()
+  };
 }
 
 function appendOptionalParam(

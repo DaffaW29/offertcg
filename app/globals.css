@@ -364,6 +364,29 @@ h3 {
   scrollbar-gutter: stable;
 }
 
+.pagination-bar {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+}
+
+.pagination-bar span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.pagination-controls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .result-card {
   align-items: start;
   background: var(--panel-soft);
@@ -637,17 +660,20 @@ tfoot td {
   }
 
   .panel-heading,
+  .pagination-bar,
   .percent-toolbar {
     align-items: stretch;
     flex-direction: column;
   }
 
   .cart-actions,
+  .pagination-controls,
   .quick-buttons {
     width: 100%;
   }
 
   .quick-buttons button,
+  .pagination-controls button,
   .cart-actions button {
     flex: 1 1 auto;
   }

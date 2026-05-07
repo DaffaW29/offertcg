@@ -1,7 +1,10 @@
-import type {
-  CardSearchFilters,
-  CardSearchResult,
-  PriceProvider
+import {
+  DEFAULT_SEARCH_PAGE,
+  MAX_SEARCH_PAGE_SIZE,
+  SEARCH_PAGE_SIZE,
+  type CardSearchFilters,
+  type CardSearchResult,
+  type PriceProvider
 } from "../types";
 
 const mockUpdatedAt = "2026-05-03T00:00:00.000Z";
@@ -116,8 +119,10 @@ export const mockProvider: PriceProvider = {
     const setName = normalize(filters.setName);
     const cardNumber = normalize(filters.cardNumber);
     const rarity = normalize(filters.rarity);
+    const page = normalizedPage(filters.page);
+    const pageSize = normalizedPageSize(filters.pageSize);
 
-    return mockCards.filter((card) => {
+    const filteredCards = mockCards.filter((card) => {
       const matchesQuery =
         normalize(card.name).includes(query) ||
         normalize(card.setName).includes(query) ||
@@ -135,9 +140,35 @@ export const mockProvider: PriceProvider = {
 
       return matchesQuery && matchesSet && matchesNumber && matchesRarity;
     });
+    const start = (page - 1) * pageSize;
+    const cards = filteredCards.slice(start, start + pageSize);
+
+    return {
+      cards,
+      page,
+      pageSize,
+      count: cards.length,
+      totalCount: filteredCards.length
+    };
   }
 };
 
 function normalize(value?: string) {
   return value?.trim().toLowerCase() ?? "";
+}
+
+function normalizedPage(value?: number) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_SEARCH_PAGE;
+  }
+
+  return Math.max(DEFAULT_SEARCH_PAGE, Math.floor(value));
+}
+
+function normalizedPageSize(value?: number) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return SEARCH_PAGE_SIZE;
+  }
+
+  return Math.min(MAX_SEARCH_PAGE_SIZE, Math.max(1, Math.floor(value)));
 }

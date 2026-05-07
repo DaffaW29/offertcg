@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { searchCardsWithFallback } from "@/lib/pricing";
+import {
+  DEFAULT_SEARCH_PAGE,
+  SEARCH_PAGE_SIZE
+} from "@/lib/pricing/types";
 
 export const dynamic = "force-dynamic";
 
@@ -24,13 +28,16 @@ export async function GET(request: Request) {
   const setName = cleanOptional(searchParams.get("set"));
   const cardNumber = cleanOptional(searchParams.get("number"));
   const rarity = cleanOptional(searchParams.get("rarity"));
+  const page = parsePage(searchParams.get("page"));
 
   try {
     const result = await searchCardsWithFallback({
       query,
       setName,
       cardNumber,
-      rarity
+      rarity,
+      page,
+      pageSize: SEARCH_PAGE_SIZE
     });
 
     return NextResponse.json(result);
@@ -50,4 +57,14 @@ export async function GET(request: Request) {
 function cleanOptional(value: string | null) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function parsePage(value: string | null) {
+  const page = Number(value);
+
+  if (!Number.isFinite(page)) {
+    return DEFAULT_SEARCH_PAGE;
+  }
+
+  return Math.max(DEFAULT_SEARCH_PAGE, Math.floor(page));
 }

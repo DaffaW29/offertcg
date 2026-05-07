@@ -1,10 +1,16 @@
 export type PriceProviderName = "pokemon-tcg-api" | "tcgplayer" | "mock";
 
+export const DEFAULT_SEARCH_PAGE = 1;
+export const SEARCH_PAGE_SIZE = 50;
+export const MAX_SEARCH_PAGE_SIZE = 250;
+
 export type CardSearchFilters = {
   query: string;
   setName?: string;
   cardNumber?: string;
   rarity?: string;
+  page?: number;
+  pageSize?: number;
 };
 
 export type PriceVariant = {
@@ -29,8 +35,15 @@ export type CardSearchResult = {
   lastUpdated: string;
 };
 
-export type ProviderSearchResponse = {
+export type CardSearchPage = {
   cards: CardSearchResult[];
+  page: number;
+  pageSize: number;
+  count: number;
+  totalCount: number;
+};
+
+export type ProviderSearchResponse = CardSearchPage & {
   provider: PriceProviderName;
   isFallback: boolean;
   message?: string;
@@ -38,5 +51,5 @@ export type ProviderSearchResponse = {
 
 export type PriceProvider = {
   name: PriceProviderName;
-  searchCards(filters: CardSearchFilters): Promise<CardSearchResult[]>;
+  searchCards(filters: CardSearchFilters): Promise<CardSearchPage>;
 };

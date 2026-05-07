@@ -15,8 +15,10 @@ export async function searchCardsWithFallback(
   const provider = getConfiguredProvider();
 
   if (provider.name === "mock") {
+    const searchPage = await mockProvider.searchCards(filters);
+
     return {
-      cards: await mockProvider.searchCards(filters),
+      ...searchPage,
       provider: "mock",
       isFallback: false,
       message: "Using mock price data."
@@ -24,18 +26,20 @@ export async function searchCardsWithFallback(
   }
 
   try {
+    const searchPage = await provider.searchCards(filters);
+
     return {
-      cards: await provider.searchCards(filters),
+      ...searchPage,
       provider: provider.name,
       isFallback: false
     };
   } catch (error) {
-    const fallbackCards = await mockProvider.searchCards(filters);
+    const fallbackPage = await mockProvider.searchCards(filters);
     const detail =
       error instanceof Error ? error.message : "Live price provider failed.";
 
     return {
-      cards: fallbackCards,
+      ...fallbackPage,
       provider: "mock",
       isFallback: true,
       message: `${provider.name} unavailable. Showing mock data until a supported live provider is available. ${detail}`

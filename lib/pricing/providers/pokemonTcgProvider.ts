@@ -1,8 +1,14 @@
 import type {
   CardSearchFilters,
+  CardSearchPage,
   CardSearchResult,
   PriceProvider,
   PriceVariant
+} from "../types";
+import {
+  DEFAULT_SEARCH_PAGE,
+  MAX_SEARCH_PAGE_SIZE,
+  SEARCH_PAGE_SIZE
 } from "../types";
 
 const POKEMON_TCG_CARDS_URL = "https://api.pokemontcg.io/v2/cards";
@@ -53,6 +59,10 @@ type PokemonTcgCard = {
 
 type PokemonTcgResponse = {
   data?: PokemonTcgCard[];
+  page?: number;
+  pageSize?: number;
+  count?: number;
+  totalCount?: number;
 };
 
 export const pokemonTcgProvider: PriceProvider = {
@@ -77,7 +87,7 @@ export const pokemonTcgProvider: PriceProvider = {
       }
 
       const payload = (await response.json()) as PokemonTcgResponse;
-      return (payload.data ?? []).map(mapPokemonCard);
+      return mapPokemonResponse(payload, filters);
     } finally {
       clearTimeout(timeout);
     }
@@ -101,11 +111,54 @@ function buildSearchUrl(filters: CardSearchFilters) {
   }
 
   url.searchParams.set("q", queryParts.join(" "));
-  url.searchParams.set("pageSize", "20");
+  url.searchParams.set("page", normalizedPage(filters.page).toString());
+  url.searchParams.set(
+    "pageSize",
+    normalizedPageSize(filters.pageSize).toString()
+  );
   url.searchParams.set("orderBy", "-set.releaseDate,name,number");
   url.searchParams.set("select", "id,name,set,number,rarity,images,tcgplayer");
 
   return url;
+}
+
+function mapPokemonResponse(
+  payload: PokemonTcgResponse,
+  filters: CardSearchFilters
+): CardSearchPage {
+  const cards = (payload.data ?? []).map(mapPokemonCard);
+
+  return {
+    cards,
+    page: normalizedPage(payload.page ?? filters.page),
+    pageSize: normalizedPageSize(payload.pageSize ?? filters.pageSize),
+    count: nonNegativeInteger(payload.count, cards.length),
+    totalCount: nonNegativeInteger(payload.totalCount, cards.length)
+  };
+}
+
+function normalizedPage(value?: number) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_SEARCH_PAGE;
+  }
+
+  return Math.max(DEFAULT_SEARCH_PAGE, Math.floor(value));
+}
+
+function normalizedPageSize(value?: number) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return SEARCH_PAGE_SIZE;
+  }
+
+  return Math.min(MAX_SEARCH_PAGE_SIZE, Math.max(1, Math.floor(value)));
+}
+
+function nonNegativeInteger(value: number | undefined, fallback: number) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.max(0, Math.floor(value));
 }
 
 function buildHeaders() {

@@ -26,8 +26,8 @@ This repo currently contains a working MVP website with:
 
 ## Features
 
-- Pokemon card search by name with optional set name, card number, and rarity
-  filters.
+- Paginated Pokemon card search by name with optional set name, card number, and
+  rarity filters.
 - Server-side price provider abstraction so API keys stay out of client code.
 - Default live provider uses the Pokemon TCG API.
 - Mock provider fallback when live price lookup is unavailable.
