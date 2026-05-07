@@ -34,7 +34,7 @@ This repo currently contains a working MVP website with:
 - Deal cart with market value, buy percentage, suggested buy price, quantity,
   total payout, notes, condition, manual price override, remove, clear cart, and
   CSV export.
-- Quick buy percentage buttons: 50%, 60%, 65%, 70%, 75%, and 80%.
+- Quick buy percentage buttons: 70%, 75%, 80%, 85%, 90%, 95%, and 100%.
 - Cart persistence across refreshes.
 
 ## Setup

@@ -14,3 +14,10 @@
 - Cart persistence key: `offertcg-current-deal-v1`.
 - Current verification target: `npm run lint`, `npm run build`, and manual local
   testing through the Next.js dev server.
+
+## 2026-05-07
+
+- Updated quick buy percentage controls to run from 70% through 100% in 5-point
+  increments, with the default reset target aligned to 70%.
+- Added a vertical scroll area to search results so long card searches remain
+  contained inside the results panel.

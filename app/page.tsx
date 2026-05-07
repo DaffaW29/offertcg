@@ -25,9 +25,9 @@ import type {
   ProviderSearchResponse
 } from "@/lib/pricing/types";
 
-const QUICK_PERCENTAGES = [50, 60, 65, 70, 75, 80];
+const QUICK_PERCENTAGES = [70, 75, 80, 85, 90, 95, 100];
 const STORAGE_KEY = "offertcg-current-deal-v1";
-const DEFAULT_BUY_PERCENT = 65;
+const DEFAULT_BUY_PERCENT = QUICK_PERCENTAGES[0];
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
