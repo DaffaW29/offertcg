@@ -23,3 +23,6 @@
   contained inside the results panel.
 - Added paginated card search using 50 results per page with Next/Previous
   controls and provider response metadata from the Pokemon TCG API.
+- Added browser-local recent buy lots under `offertcg-recent-buys-v1`,
+  checkout from the active cart, partial sold-quantity tracking, and gross
+  profit summaries by lot.

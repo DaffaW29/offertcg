@@ -4,11 +4,14 @@ import Image from "next/image";
 import {
   ChevronLeft,
   ChevronRight,
+  CheckCircle,
   Download,
+  History,
   Loader2,
   Plus,
   RotateCcw,
   Search,
+  ShoppingCart,
   Trash2,
   X
 } from "lucide-react";
@@ -16,10 +19,16 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   CONDITIONS,
   type CardCondition,
+  type DealLot,
+  type DealLotItem,
   type DealItem,
   effectiveMarketPrice,
+  grossProfit,
+  lotTotals,
+  remainingQuantity,
   roundCurrency,
   suggestedBuyPrice,
+  soldRevenue,
   totalPayout
 } from "@/lib/deals";
 import {
@@ -31,6 +40,7 @@ import {
 
 const QUICK_PERCENTAGES = [70, 75, 80, 85, 90, 95, 100];
 const STORAGE_KEY = "offertcg-current-deal-v1";
+const RECENT_BUYS_STORAGE_KEY = "offertcg-recent-buys-v1";
 const DEFAULT_BUY_PERCENT = QUICK_PERCENTAGES[0];
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
@@ -47,6 +57,8 @@ type ApiErrorResponse = {
   error?: string;
 };
 
+type ActiveTab = "current" | "recent";
+
 type SearchFilters = {
   query: string;
   setName: string;
@@ -61,6 +73,11 @@ type SearchPagination = {
   totalCount: number;
 };
 
+type SaleDraft = {
+  quantity: string;
+  saleTotal: string;
+};
+
 const EMPTY_SEARCH_PAGINATION: SearchPagination = {
   page: DEFAULT_SEARCH_PAGE,
   pageSize: SEARCH_PAGE_SIZE,
@@ -69,6 +86,7 @@ const EMPTY_SEARCH_PAGINATION: SearchPagination = {
 };
 
 export default function Home() {
+  const [activeTab, setActiveTab] = useState<ActiveTab>("current");
   const [query, setQuery] = useState("");
   const [setName, setSetName] = useState("");
   const [cardNumber, setCardNumber] = useState("");
@@ -88,6 +106,9 @@ export default function Home() {
   const [hasSearched, setHasSearched] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [cart, setCart] = useState<DealItem[]>([]);
+  const [recentBuys, setRecentBuys] = useState<DealLot[]>([]);
+  const [selectedLotId, setSelectedLotId] = useState<string | null>(null);
+  const [saleDrafts, setSaleDrafts] = useState<Record<string, SaleDraft>>({});
   const [globalBuyPercent, setGlobalBuyPercent] =
     useState(DEFAULT_BUY_PERCENT);
   const [hasHydrated, setHasHydrated] = useState(false);
@@ -95,7 +116,9 @@ export default function Home() {
 
   useEffect(() => {
     const rawDeal = window.localStorage.getItem(STORAGE_KEY);
+    const rawRecentBuys = window.localStorage.getItem(RECENT_BUYS_STORAGE_KEY);
     let storedDeal: StoredDeal = {};
+    let storedRecentBuys: DealLot[] = [];
 
     if (rawDeal) {
       try {
@@ -105,10 +128,23 @@ export default function Home() {
       }
     }
 
+    if (rawRecentBuys) {
+      try {
+        const parsedRecentBuys = JSON.parse(rawRecentBuys) as unknown;
+        if (Array.isArray(parsedRecentBuys)) {
+          storedRecentBuys = parsedRecentBuys as DealLot[];
+        }
+      } catch {
+        window.localStorage.removeItem(RECENT_BUYS_STORAGE_KEY);
+      }
+    }
+
     const frame = window.requestAnimationFrame(() => {
       if (Array.isArray(storedDeal.cart)) {
         setCart(storedDeal.cart);
       }
+      setRecentBuys(storedRecentBuys);
+      setSelectedLotId(storedRecentBuys[0]?.id ?? null);
       if (isValidPercent(storedDeal.globalBuyPercent)) {
         setGlobalBuyPercent(storedDeal.globalBuyPercent);
       }
@@ -130,6 +166,17 @@ export default function Home() {
   }, [cart, globalBuyPercent, hasHydrated]);
 
   useEffect(() => {
+    if (!hasHydrated) {
+      return;
+    }
+
+    window.localStorage.setItem(
+      RECENT_BUYS_STORAGE_KEY,
+      JSON.stringify(recentBuys)
+    );
+  }, [recentBuys, hasHydrated]);
+
+  useEffect(() => {
     resultListRef.current?.scrollTo({ top: 0 });
   }, [results]);
 
@@ -145,6 +192,36 @@ export default function Home() {
       { marketValue: 0, payout: 0, quantity: 0 }
     );
   }, [cart]);
+  const selectedLot = useMemo(() => {
+    return (
+      recentBuys.find((lot) => lot.id === selectedLotId) ??
+      recentBuys[0] ??
+      null
+    );
+  }, [recentBuys, selectedLotId]);
+  const selectedLotTotals = useMemo(() => {
+    return selectedLot ? lotTotals(selectedLot) : null;
+  }, [selectedLot]);
+  const recentBuySummary = useMemo(() => {
+    return recentBuys.reduce(
+      (summary, lot) => {
+        const totals = lotTotals(lot);
+        summary.buyCost += totals.buyCost;
+        summary.soldRevenue += totals.soldRevenue;
+        summary.grossProfit += totals.grossProfit;
+        summary.remainingQuantity += totals.remainingQuantity;
+        summary.lots += 1;
+        return summary;
+      },
+      {
+        buyCost: 0,
+        soldRevenue: 0,
+        grossProfit: 0,
+        remainingQuantity: 0,
+        lots: 0
+      }
+    );
+  }, [recentBuys]);
   const totalPages = Math.max(
     DEFAULT_SEARCH_PAGE,
     Math.ceil(pagination.totalCount / pagination.pageSize)
@@ -310,6 +387,93 @@ export default function Home() {
     setCart([]);
   }
 
+  function checkoutCart() {
+    if (cart.length === 0) {
+      return;
+    }
+
+    const checkedOutAt = new Date().toISOString();
+    const lot: DealLot = {
+      id: createId("lot"),
+      label: formatLotLabel(checkedOutAt),
+      checkedOutAt,
+      items: cart.map(createDealLotItem)
+    };
+
+    setRecentBuys((current) => [lot, ...current]);
+    setSelectedLotId(lot.id);
+    setCart([]);
+    setActiveTab("recent");
+  }
+
+  function updateSaleDraft(key: string, draft: SaleDraft) {
+    setSaleDrafts((current) => ({
+      ...current,
+      [key]: draft
+    }));
+  }
+
+  function markItemSold(lotId: string, itemId: string) {
+    const key = saleDraftKey(lotId, itemId);
+    const draft = saleDrafts[key];
+    const quantity = Math.floor(Number(draft?.quantity));
+    const saleTotal = roundCurrency(Number(draft?.saleTotal));
+
+    if (
+      !Number.isFinite(quantity) ||
+      quantity < 1 ||
+      !Number.isFinite(saleTotal) ||
+      saleTotal <= 0
+    ) {
+      return;
+    }
+
+    const soldAt = new Date().toISOString();
+
+    setRecentBuys((current) =>
+      current.map((lot) => {
+        if (lot.id !== lotId) {
+          return lot;
+        }
+
+        return {
+          ...lot,
+          items: lot.items.map((item) => {
+            if (item.id !== itemId) {
+              return item;
+            }
+
+            const remaining = remainingQuantity(item);
+            const soldQuantity = Math.min(quantity, remaining);
+            if (soldQuantity < 1) {
+              return item;
+            }
+
+            return {
+              ...item,
+              soldQuantity: item.soldQuantity + soldQuantity,
+              sales: [
+                ...item.sales,
+                {
+                  id: createId("sale"),
+                  soldAt,
+                  quantity: soldQuantity,
+                  saleTotal
+                }
+              ]
+            };
+          })
+        };
+      })
+    );
+
+    setSaleDrafts((current) => {
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  }
+
   function exportCsv() {
     if (cart.length === 0) {
       return;
@@ -379,6 +543,30 @@ export default function Home() {
         </div>
       </header>
 
+      <nav className="tab-bar" aria-label="Workspace views">
+        <button
+          className={activeTab === "current" ? "active" : ""}
+          type="button"
+          onClick={() => setActiveTab("current")}
+        >
+          <ShoppingCart size={17} />
+          Current Deal
+        </button>
+        <button
+          className={activeTab === "recent" ? "active" : ""}
+          type="button"
+          onClick={() => setActiveTab("recent")}
+        >
+          <History size={17} />
+          Recent Buys
+          {recentBuys.length > 0 ? (
+            <span className="tab-count">{recentBuys.length}</span>
+          ) : null}
+        </button>
+      </nav>
+
+      {activeTab === "current" ? (
+        <>
       <section className="search-panel">
         <form className="search-form" onSubmit={handleSearch}>
           <div className="search-main">
@@ -608,6 +796,15 @@ export default function Home() {
             </div>
             <div className="cart-actions">
               <button
+                className="secondary-button"
+                type="button"
+                onClick={checkoutCart}
+                disabled={cart.length === 0}
+              >
+                <CheckCircle size={17} />
+                Checkout
+              </button>
+              <button
                 className="ghost-button"
                 type="button"
                 onClick={exportCsv}
@@ -819,6 +1016,206 @@ export default function Home() {
           ) : null}
         </section>
       </section>
+        </>
+      ) : (
+        <section className="recent-buys-view">
+          <div className="summary-grid recent-summary" aria-label="Recent buy totals">
+            <SummaryMetric
+              label="Total buy cost"
+              value={formatCurrency(recentBuySummary.buyCost)}
+            />
+            <SummaryMetric
+              label="Sold revenue"
+              value={formatCurrency(recentBuySummary.soldRevenue)}
+            />
+            <SummaryMetric
+              label="Gross profit"
+              value={formatCurrency(recentBuySummary.grossProfit)}
+              strong
+            />
+          </div>
+
+          {recentBuys.length === 0 ? (
+            <section className="panel">
+              <div className="empty-state">
+                <span>Checkout a deal cart to start tracking recent buys.</span>
+              </div>
+            </section>
+          ) : (
+            <section className="recent-grid">
+              <aside className="panel lot-list-panel" aria-label="Recent buy lots">
+                <div className="panel-heading">
+                  <div>
+                    <p className="eyebrow">Recent buys</p>
+                    <h2>Lots</h2>
+                  </div>
+                </div>
+                <div className="lot-list">
+                  {recentBuys.map((lot) => {
+                    const totals = lotTotals(lot);
+
+                    return (
+                      <button
+                        className={
+                          selectedLot?.id === lot.id
+                            ? "lot-list-item active"
+                            : "lot-list-item"
+                        }
+                        key={lot.id}
+                        type="button"
+                        onClick={() => setSelectedLotId(lot.id)}
+                      >
+                        <span>
+                          <strong>{lot.label}</strong>
+                          <small>{formatDateTime(lot.checkedOutAt)}</small>
+                        </span>
+                        <span>
+                          {totals.remainingQuantity} left ·{" "}
+                          {formatCurrency(totals.grossProfit)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </aside>
+
+              {selectedLot && selectedLotTotals ? (
+                <section className="panel lot-detail-panel">
+                  <div className="panel-heading lot-detail-heading">
+                    <div>
+                      <p className="eyebrow">Lot detail</p>
+                      <h2>{selectedLot.label}</h2>
+                      <p className="muted">
+                        Checked out {formatDateTime(selectedLot.checkedOutAt)}
+                      </p>
+                    </div>
+                    <div className="lot-metrics" aria-label="Selected lot totals">
+                      <SummaryMetric
+                        label="Buy cost"
+                        value={formatCurrency(selectedLotTotals.buyCost)}
+                      />
+                      <SummaryMetric
+                        label="Sold"
+                        value={formatCurrency(selectedLotTotals.soldRevenue)}
+                      />
+                      <SummaryMetric
+                        label="Profit"
+                        value={formatCurrency(selectedLotTotals.grossProfit)}
+                        strong
+                      />
+                    </div>
+                  </div>
+
+                  <div className="lot-items">
+                    {selectedLot.items.map((item) => {
+                      const key = saleDraftKey(selectedLot.id, item.id);
+                      const draft = saleDrafts[key] ?? {
+                        quantity: "",
+                        saleTotal: ""
+                      };
+                      const remaining = remainingQuantity(item);
+                      const draftQuantity = Number(draft.quantity);
+                      const draftSaleTotal = Number(draft.saleTotal);
+                      const canRecordSale =
+                        remaining > 0 &&
+                        Number.isFinite(draftQuantity) &&
+                        draftQuantity >= 1 &&
+                        Number.isFinite(draftSaleTotal) &&
+                        draftSaleTotal > 0;
+
+                      return (
+                        <article className="lot-item" key={item.id}>
+                          <div className="lot-item-main">
+                            <CardThumb card={item} compact />
+                            <div>
+                              <h3>{item.name}</h3>
+                              <p>
+                                {item.setName} #{item.cardNumber}
+                              </p>
+                              <p className="muted">
+                                {item.variantLabel} · {item.condition}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="lot-item-stats">
+                            <MetricStack label="Bought" value={item.quantity.toString()} />
+                            <MetricStack
+                              label="Remaining"
+                              value={remaining.toString()}
+                            />
+                            <MetricStack
+                              label="Buy cost"
+                              value={formatCurrency(item.buyTotal)}
+                            />
+                            <MetricStack
+                              label="Sold"
+                              value={formatCurrency(soldRevenue(item))}
+                            />
+                            <MetricStack
+                              label="Profit"
+                              value={formatCurrency(grossProfit(item))}
+                            />
+                          </div>
+
+                          <div className="sale-form" aria-label={`Mark ${item.name} sold`}>
+                            <label>
+                              Qty sold
+                              <input
+                                type="number"
+                                min="1"
+                                max={remaining}
+                                step="1"
+                                value={draft.quantity}
+                                onChange={(event) =>
+                                  updateSaleDraft(key, {
+                                    ...draft,
+                                    quantity: clampQuantityInput(
+                                      event.target.value,
+                                      remaining
+                                    )
+                                  })
+                                }
+                                disabled={remaining === 0}
+                              />
+                            </label>
+                            <label>
+                              Sale total
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={draft.saleTotal}
+                                onChange={(event) =>
+                                  updateSaleDraft(key, {
+                                    ...draft,
+                                    saleTotal: event.target.value
+                                  })
+                                }
+                                placeholder="0.00"
+                                disabled={remaining === 0}
+                              />
+                            </label>
+                            <button
+                              className="secondary-button"
+                              type="button"
+                              onClick={() => markItemSold(selectedLot.id, item.id)}
+                              disabled={!canRecordSale}
+                            >
+                              <CheckCircle size={17} />
+                              Mark sold
+                            </button>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </section>
+              ) : null}
+            </section>
+          )}
+        </section>
+      )}
     </main>
   );
 }
@@ -834,6 +1231,21 @@ function SummaryMetric({
 }) {
   return (
     <div className={strong ? "summary-card strong" : "summary-card"}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function MetricStack({
+  label,
+  value
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="metric-stack">
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
@@ -864,11 +1276,27 @@ function CardThumb({
   );
 }
 
+function createDealLotItem(item: DealItem): DealLotItem {
+  const buyUnitPrice = suggestedBuyPrice(item);
+
+  return {
+    ...item,
+    buyUnitPrice,
+    buyTotal: roundCurrency(buyUnitPrice * item.quantity),
+    soldQuantity: 0,
+    sales: []
+  };
+}
+
 function getSelectedVariant(card: CardSearchResult, selectedId?: string) {
   return (
     card.variants.find((variant) => variant.id === selectedId) ??
     card.variants[0]
   );
+}
+
+function saleDraftKey(lotId: string, itemId: string) {
+  return `${lotId}|${itemId}`;
 }
 
 function toSearchFilters(
@@ -913,6 +1341,21 @@ function formatDate(value: string) {
   });
 }
 
+function formatDateTime(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
+}
+
 function sourceLabel(source: CardSearchResult["priceSource"]) {
   if (source === "pokemon-tcg-api") {
     return "Pokemon TCG API";
@@ -935,6 +1378,31 @@ function clampPercent(value: number) {
   }
 
   return Math.min(100, Math.max(1, Math.round(value)));
+}
+
+function clampQuantityInput(value: string, maxQuantity: number) {
+  if (value === "" || maxQuantity < 1) {
+    return "";
+  }
+
+  const quantity = Math.floor(Number(value));
+  if (!Number.isFinite(quantity)) {
+    return "";
+  }
+
+  return Math.min(maxQuantity, Math.max(1, quantity)).toString();
+}
+
+function formatLotLabel(checkedOutAt: string) {
+  return `Lot ${formatDateTime(checkedOutAt)}`;
+}
+
+function createId(prefix: string) {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function escapeCsvValue(value: string) {

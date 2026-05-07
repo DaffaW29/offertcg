@@ -184,6 +184,45 @@ h3 {
   color: rgba(255, 255, 255, 0.78);
 }
 
+.tab-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.tab-bar button {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-weight: 900;
+  padding: 0.65rem 0.9rem;
+}
+
+.tab-bar button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+.tab-count {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.74rem;
+  font-weight: 900;
+  justify-content: center;
+  min-width: 1.45rem;
+  padding: 0.1rem 0.35rem;
+}
+
+.tab-bar button:not(.active) .tab-count {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
 .search-panel,
 .panel {
   background: var(--panel);
@@ -206,7 +245,8 @@ h3 {
 
 .search-main label,
 .filter-grid label,
-.percent-toolbar label {
+.percent-toolbar label,
+.sale-form label {
   color: var(--muted);
   display: grid;
   font-size: 0.82rem;
@@ -622,6 +662,118 @@ tfoot td {
   margin: 1rem;
 }
 
+.recent-summary {
+  margin-bottom: 1rem;
+}
+
+.recent-grid {
+  align-items: start;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(280px, 0.38fr) minmax(620px, 1fr);
+}
+
+.lot-list {
+  display: grid;
+  max-height: clamp(22rem, 70vh, 50rem);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.lot-list-item {
+  align-items: start;
+  background: transparent;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  color: var(--text);
+  display: grid;
+  gap: 0.45rem;
+  justify-content: stretch;
+  min-height: auto;
+  padding: 0.85rem 1rem;
+  text-align: left;
+  width: 100%;
+}
+
+.lot-list-item:hover,
+.lot-list-item.active {
+  background: var(--panel-soft);
+}
+
+.lot-list-item span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.lot-list-item small,
+.metric-stack span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.lot-detail-heading {
+  align-items: start;
+}
+
+.lot-metrics {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-width: min(100%, 520px);
+}
+
+.lot-metrics .summary-card {
+  box-shadow: none;
+  padding: 0.8rem;
+}
+
+.lot-items {
+  display: grid;
+}
+
+.lot-item {
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.2fr);
+  padding: 1rem;
+}
+
+.lot-item-main {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.lot-item-main p {
+  margin-bottom: 0.2rem;
+}
+
+.lot-item-stats {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.metric-stack {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.metric-stack strong {
+  font-size: 0.95rem;
+}
+
+.sale-form {
+  align-items: end;
+  display: grid;
+  gap: 0.65rem;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(120px, 0.22fr) minmax(140px, 0.28fr) auto;
+}
+
 .spin {
   animation: spin 900ms linear infinite;
 }
@@ -634,6 +786,7 @@ tfoot td {
 
 @media (max-width: 1180px) {
   .app-header,
+  .recent-grid,
   .workspace-grid,
   .search-form {
     grid-template-columns: 1fr;
@@ -641,6 +794,10 @@ tfoot td {
 
   .summary-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .lot-item {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -655,6 +812,8 @@ tfoot td {
 
   .summary-grid,
   .filter-grid,
+  .lot-item-stats,
+  .lot-metrics,
   .result-controls {
     grid-template-columns: 1fr;
   }
@@ -668,14 +827,20 @@ tfoot td {
 
   .cart-actions,
   .pagination-controls,
+  .sale-form,
   .quick-buttons {
     width: 100%;
   }
 
   .quick-buttons button,
   .pagination-controls button,
+  .sale-form button,
   .cart-actions button {
     flex: 1 1 auto;
+  }
+
+  .sale-form {
+    grid-template-columns: 1fr;
   }
 
   .result-card {

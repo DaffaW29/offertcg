@@ -14,7 +14,8 @@ This repo currently contains a working MVP website with:
   percentage buttons.
 - Condition selection, notes, manual market price override, clear cart, and CSV
   export.
-- Browser `localStorage` persistence so the current deal survives refreshes.
+- Browser `localStorage` persistence so the current deal and recent buys survive
+  refreshes.
 
 ## Stack
 
@@ -22,7 +23,7 @@ This repo currently contains a working MVP website with:
 - React
 - TypeScript
 - Server route handlers for price lookup
-- Browser `localStorage` for the current deal cart
+- Browser `localStorage` for the current deal cart and recent buy history
 
 ## Features
 
@@ -34,8 +35,10 @@ This repo currently contains a working MVP website with:
 - Deal cart with market value, buy percentage, suggested buy price, quantity,
   total payout, notes, condition, manual price override, remove, clear cart, and
   CSV export.
+- Checkout flow that stores recent buy lots in the browser.
+- Recent buys view with partial sold-quantity tracking and gross profit by lot.
 - Quick buy percentage buttons: 70%, 75%, 80%, 85%, 90%, 95%, and 100%.
-- Cart persistence across refreshes.
+- Cart and recent buy persistence across refreshes.
 
 ## Setup
 
