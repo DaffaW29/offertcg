@@ -28,3 +28,11 @@
   profit summaries by lot.
 - Clarified selected lot detail profit metrics: `Lot net` is sold revenue minus
   total buy cost, while `Sold profit` remains realized profit on sold quantities.
+
+## 2026-05-09
+
+- Added Supabase Auth/Postgres integration with email/password account sync,
+  RLS schema in `supabase/schema.sql`, and client data helpers under
+  `lib/supabase`.
+- Existing local cart/recent buy data imports once after first sign-in, then
+  signed-in persistence uses Supabase while unsigned users keep local fallback.

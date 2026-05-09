@@ -7,6 +7,8 @@ import {
   CheckCircle,
   Download,
   History,
+  LogIn,
+  LogOut,
   Loader2,
   Plus,
   RotateCcw,
@@ -15,6 +17,7 @@ import {
   Trash2,
   X
 } from "lucide-react";
+import type { Session } from "@supabase/supabase-js";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   CONDITIONS,
@@ -38,6 +41,15 @@ import {
   type CardSearchResult,
   type ProviderSearchResponse
 } from "@/lib/pricing/types";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import {
+  loadCloudDealState,
+  loadCloudLots,
+  saveCloudDealState,
+  saveCloudLot,
+  saveCloudLots,
+  saveCloudSale
+} from "@/lib/supabase/deals";
 
 const QUICK_PERCENTAGES = [70, 75, 80, 85, 90, 95, 100];
 const STORAGE_KEY = "offertcg-current-deal-v1";
@@ -79,6 +91,8 @@ type SaleDraft = {
   saleTotal: string;
 };
 
+type AuthMode = "login" | "signup";
+
 const EMPTY_SEARCH_PAGINATION: SearchPagination = {
   page: DEFAULT_SEARCH_PAGE,
   pageSize: SEARCH_PAGE_SIZE,
@@ -87,6 +101,16 @@ const EMPTY_SEARCH_PAGINATION: SearchPagination = {
 };
 
 export default function Home() {
+  const supabaseClient = useMemo(() => getSupabaseBrowserClient(), []);
+  const [session, setSession] = useState<Session | null>(null);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authMessage, setAuthMessage] = useState("");
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
+  const [isCloudLoading, setIsCloudLoading] = useState(false);
+  const [hasCloudDataLoaded, setHasCloudDataLoaded] = useState(false);
+  const [cloudMessage, setCloudMessage] = useState("");
   const [activeTab, setActiveTab] = useState<ActiveTab>("current");
   const [query, setQuery] = useState("");
   const [setName, setSetName] = useState("");
@@ -114,6 +138,45 @@ export default function Home() {
     useState(DEFAULT_BUY_PERCENT);
   const [hasHydrated, setHasHydrated] = useState(false);
   const resultListRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!supabaseClient) {
+      const frame = window.requestAnimationFrame(() => {
+        setIsAuthReady(true);
+      });
+      return () => window.cancelAnimationFrame(frame);
+    }
+
+    let isMounted = true;
+
+    supabaseClient.auth.getSession().then(({ data, error }) => {
+      if (!isMounted) {
+        return;
+      }
+
+      if (error) {
+        setAuthMessage(error.message);
+      }
+
+      setSession(data.session);
+      setIsAuthReady(true);
+    });
+
+    const {
+      data: { subscription }
+    } = supabaseClient.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setHasCloudDataLoaded(false);
+      if (!nextSession) {
+        setCloudMessage("");
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, [supabaseClient]);
 
   useEffect(() => {
     const rawDeal = window.localStorage.getItem(STORAGE_KEY);
@@ -156,7 +219,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!hasHydrated) {
+    if (!hasHydrated || session) {
       return;
     }
 
@@ -164,10 +227,10 @@ export default function Home() {
       STORAGE_KEY,
       JSON.stringify({ cart, globalBuyPercent })
     );
-  }, [cart, globalBuyPercent, hasHydrated]);
+  }, [cart, globalBuyPercent, hasHydrated, session]);
 
   useEffect(() => {
-    if (!hasHydrated) {
+    if (!hasHydrated || session) {
       return;
     }
 
@@ -175,7 +238,143 @@ export default function Home() {
       RECENT_BUYS_STORAGE_KEY,
       JSON.stringify(recentBuys)
     );
-  }, [recentBuys, hasHydrated]);
+  }, [recentBuys, hasHydrated, session]);
+
+  useEffect(() => {
+    if (!supabaseClient || !session || !hasHydrated || hasCloudDataLoaded) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    async function loadAccountData() {
+      if (!supabaseClient || !session) {
+        return;
+      }
+
+      setIsCloudLoading(true);
+      setCloudMessage("Loading cloud data...");
+
+      try {
+        let cloudDeal = await loadCloudDealState(
+          supabaseClient,
+          session.user.id,
+          DEFAULT_BUY_PERCENT
+        );
+        let cloudLots = await loadCloudLots(supabaseClient, session.user.id);
+
+        if (!cloudDeal.importedLocalData) {
+          const localDeal = readStoredDeal();
+          const localLots = readStoredRecentBuys();
+          const shouldImportCart =
+            Array.isArray(localDeal.cart) &&
+            localDeal.cart.length > 0 &&
+            cloudDeal.cart.length === 0;
+          const shouldImportLots = localLots.length > 0;
+
+          if (shouldImportCart) {
+            await saveCloudDealState(
+              supabaseClient,
+              session.user.id,
+              localDeal.cart ?? [],
+              isValidPercent(localDeal.globalBuyPercent)
+                ? localDeal.globalBuyPercent
+              : DEFAULT_BUY_PERCENT
+            );
+          } else {
+            await saveCloudDealState(
+              supabaseClient,
+              session.user.id,
+              cloudDeal.cart,
+              cloudDeal.globalBuyPercent
+            );
+          }
+
+          if (shouldImportLots) {
+            await saveCloudLots(supabaseClient, session.user.id, localLots);
+          }
+
+          clearLocalDealStorage();
+          cloudDeal = await loadCloudDealState(
+            supabaseClient,
+            session.user.id,
+            DEFAULT_BUY_PERCENT
+          );
+          cloudLots = await loadCloudLots(supabaseClient, session.user.id);
+
+          setCloudMessage(
+            shouldImportCart || shouldImportLots
+              ? "Imported local data and enabled cloud sync."
+              : "Cloud sync enabled."
+          );
+        } else {
+          setCloudMessage("Cloud sync active.");
+        }
+
+        if (isCancelled) {
+          return;
+        }
+
+        setCart(cloudDeal.cart);
+        setGlobalBuyPercent(
+          isValidPercent(cloudDeal.globalBuyPercent)
+            ? cloudDeal.globalBuyPercent
+            : DEFAULT_BUY_PERCENT
+        );
+        setRecentBuys(cloudLots);
+        setSelectedLotId(cloudLots[0]?.id ?? null);
+        setHasCloudDataLoaded(true);
+      } catch (error) {
+        if (!isCancelled) {
+          setCloudMessage(
+            error instanceof Error
+              ? `Cloud sync failed: ${error.message}`
+              : "Cloud sync failed."
+          );
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsCloudLoading(false);
+        }
+      }
+    }
+
+    void loadAccountData();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [supabaseClient, session, hasHydrated, hasCloudDataLoaded]);
+
+  useEffect(() => {
+    if (!supabaseClient || !session || !hasCloudDataLoaded || isCloudLoading) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      saveCloudDealState(
+        supabaseClient,
+        session.user.id,
+        cart,
+        globalBuyPercent
+      ).catch((error: unknown) => {
+        setCloudMessage(
+          error instanceof Error
+            ? `Unable to save current deal: ${error.message}`
+            : "Unable to save current deal."
+        );
+      });
+    }, 450);
+
+    return () => window.clearTimeout(timeout);
+  }, [
+    cart,
+    globalBuyPercent,
+    hasCloudDataLoaded,
+    isCloudLoading,
+    session,
+    supabaseClient
+  ]);
 
   useEffect(() => {
     resultListRef.current?.scrollTo({ top: 0 });
@@ -241,6 +440,75 @@ export default function Home() {
   const canGoPrevious =
     hasPagedResults && pagination.page > DEFAULT_SEARCH_PAGE;
   const canGoNext = hasPagedResults && pagination.page < totalPages;
+
+  async function submitAuth(mode: AuthMode) {
+    if (!supabaseClient) {
+      setAuthMessage("Add Supabase env vars to enable account sync.");
+      return;
+    }
+
+    const email = authEmail.trim();
+    if (!email || authPassword.length < 6) {
+      setAuthMessage("Enter an email and a password with at least 6 characters.");
+      return;
+    }
+
+    setIsAuthSubmitting(true);
+    setAuthMessage("");
+
+    const result =
+      mode === "login"
+        ? await supabaseClient.auth.signInWithPassword({
+            email,
+            password: authPassword
+          })
+        : await supabaseClient.auth.signUp({
+            email,
+            password: authPassword
+          });
+
+    setIsAuthSubmitting(false);
+
+    if (result.error) {
+      setAuthMessage(result.error.message);
+      return;
+    }
+
+    setAuthPassword("");
+    setAuthMessage(
+      mode === "login"
+        ? "Signed in. Loading cloud data..."
+        : "Account created. Check your email if confirmation is enabled."
+    );
+  }
+
+  async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await submitAuth("login");
+  }
+
+  async function signOut() {
+    if (!supabaseClient) {
+      return;
+    }
+
+    setIsAuthSubmitting(true);
+    const { error } = await supabaseClient.auth.signOut();
+    setIsAuthSubmitting(false);
+
+    if (error) {
+      setAuthMessage(error.message);
+      return;
+    }
+
+    setSession(null);
+    setHasCloudDataLoaded(false);
+    setCart([]);
+    setRecentBuys([]);
+    setSelectedLotId(null);
+    setGlobalBuyPercent(DEFAULT_BUY_PERCENT);
+    setAuthMessage("Signed out. Local mode is active.");
+  }
 
   async function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -405,6 +673,16 @@ export default function Home() {
     setSelectedLotId(lot.id);
     setCart([]);
     setActiveTab("recent");
+
+    if (supabaseClient && session && hasCloudDataLoaded) {
+      saveCloudLot(supabaseClient, session.user.id, lot).catch((error: unknown) => {
+        setCloudMessage(
+          error instanceof Error
+            ? `Unable to save checked-out lot: ${error.message}`
+            : "Unable to save checked-out lot."
+        );
+      });
+    }
   }
 
   function updateSaleDraft(key: string, draft: SaleDraft) {
@@ -429,7 +707,25 @@ export default function Home() {
       return;
     }
 
+    const lot = recentBuys.find((currentLot) => currentLot.id === lotId);
+    const item = lot?.items.find((currentItem) => currentItem.id === itemId);
+    if (!item) {
+      return;
+    }
+
+    const soldQuantity = Math.min(quantity, remainingQuantity(item));
+    if (soldQuantity < 1) {
+      return;
+    }
+
     const soldAt = new Date().toISOString();
+    const sale = {
+      id: createId("sale"),
+      soldAt,
+      quantity: soldQuantity,
+      saleTotal
+    };
+    const nextSoldQuantity = item.soldQuantity + soldQuantity;
 
     setRecentBuys((current) =>
       current.map((lot) => {
@@ -444,24 +740,10 @@ export default function Home() {
               return item;
             }
 
-            const remaining = remainingQuantity(item);
-            const soldQuantity = Math.min(quantity, remaining);
-            if (soldQuantity < 1) {
-              return item;
-            }
-
             return {
               ...item,
-              soldQuantity: item.soldQuantity + soldQuantity,
-              sales: [
-                ...item.sales,
-                {
-                  id: createId("sale"),
-                  soldAt,
-                  quantity: soldQuantity,
-                  saleTotal
-                }
-              ]
+              soldQuantity: nextSoldQuantity,
+              sales: [...item.sales, sale]
             };
           })
         };
@@ -473,6 +755,24 @@ export default function Home() {
       delete next[key];
       return next;
     });
+
+    if (supabaseClient && session && hasCloudDataLoaded) {
+      saveCloudSale(
+        supabaseClient,
+        session.user.id,
+        lotId,
+        itemId,
+        soldQuantity,
+        nextSoldQuantity,
+        sale
+      ).catch((error: unknown) => {
+        setCloudMessage(
+          error instanceof Error
+            ? `Unable to save sale: ${error.message}`
+            : "Unable to save sale."
+        );
+      });
+    }
   }
 
   function exportCsv() {
@@ -537,10 +837,81 @@ export default function Home() {
             at your target percentage.
           </p>
         </div>
-        <div className="summary-grid" aria-label="Current deal totals">
-          <SummaryMetric label="Market value" value={formatCurrency(totals.marketValue)} />
-          <SummaryMetric label="Suggested payout" value={formatCurrency(totals.payout)} strong />
-          <SummaryMetric label="Cards" value={totals.quantity.toString()} />
+        <div className="header-side">
+          <div className="summary-grid" aria-label="Current deal totals">
+            <SummaryMetric label="Market value" value={formatCurrency(totals.marketValue)} />
+            <SummaryMetric label="Suggested payout" value={formatCurrency(totals.payout)} strong />
+            <SummaryMetric label="Cards" value={totals.quantity.toString()} />
+          </div>
+
+          <section className="auth-panel" aria-label="Account sync">
+            <div>
+              <p className="eyebrow">Account</p>
+              {session ? (
+                <strong>{session.user.email}</strong>
+              ) : (
+                <strong>{supabaseClient ? "Cloud sync" : "Local mode"}</strong>
+              )}
+            </div>
+
+            {!isAuthReady ? (
+              <p className="auth-message">Checking account...</p>
+            ) : session ? (
+              <div className="auth-row">
+                <span>{isCloudLoading ? "Syncing..." : cloudMessage}</span>
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={() => void signOut()}
+                  disabled={isAuthSubmitting}
+                >
+                  <LogOut size={16} />
+                  Sign out
+                </button>
+              </div>
+            ) : supabaseClient ? (
+              <form className="auth-form" onSubmit={handleAuthSubmit}>
+                <input
+                  type="email"
+                  value={authEmail}
+                  onChange={(event) => setAuthEmail(event.target.value)}
+                  placeholder="Email"
+                  autoComplete="email"
+                />
+                <input
+                  type="password"
+                  value={authPassword}
+                  onChange={(event) => setAuthPassword(event.target.value)}
+                  placeholder="Password"
+                  autoComplete="current-password"
+                />
+                <div className="auth-actions">
+                  <button
+                    className="secondary-button"
+                    type="submit"
+                    disabled={isAuthSubmitting}
+                  >
+                    <LogIn size={16} />
+                    Log in
+                  </button>
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    onClick={() => void submitAuth("signup")}
+                    disabled={isAuthSubmitting}
+                  >
+                    Sign up
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <p className="auth-message">
+                Add Supabase env vars to enable account sync.
+              </p>
+            )}
+
+            {authMessage ? <p className="auth-message">{authMessage}</p> : null}
+          </section>
         </div>
       </header>
 
@@ -1255,6 +1626,42 @@ function MetricStack({
       <strong>{value}</strong>
     </div>
   );
+}
+
+function readStoredDeal(): StoredDeal {
+  const rawDeal = window.localStorage.getItem(STORAGE_KEY);
+  if (!rawDeal) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(rawDeal) as StoredDeal;
+  } catch {
+    window.localStorage.removeItem(STORAGE_KEY);
+    return {};
+  }
+}
+
+function readStoredRecentBuys(): DealLot[] {
+  const rawRecentBuys = window.localStorage.getItem(RECENT_BUYS_STORAGE_KEY);
+  if (!rawRecentBuys) {
+    return [];
+  }
+
+  try {
+    const parsedRecentBuys = JSON.parse(rawRecentBuys) as unknown;
+    return Array.isArray(parsedRecentBuys)
+      ? (parsedRecentBuys as DealLot[])
+      : [];
+  } catch {
+    window.localStorage.removeItem(RECENT_BUYS_STORAGE_KEY);
+    return [];
+  }
+}
+
+function clearLocalDealStorage() {
+  window.localStorage.removeItem(STORAGE_KEY);
+  window.localStorage.removeItem(RECENT_BUYS_STORAGE_KEY);
 }
 
 function CardThumb({

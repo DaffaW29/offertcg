@@ -14,8 +14,9 @@ This repo currently contains a working MVP website with:
   percentage buttons.
 - Condition selection, notes, manual market price override, clear cart, and CSV
   export.
-- Browser `localStorage` persistence so the current deal and recent buys survive
-  refreshes.
+- Supabase email/password auth with cloud persistence for signed-in users.
+- Browser `localStorage` fallback and one-time import into Supabase after first
+  sign-in.
 
 ## Stack
 
@@ -23,7 +24,8 @@ This repo currently contains a working MVP website with:
 - React
 - TypeScript
 - Server route handlers for price lookup
-- Browser `localStorage` for the current deal cart and recent buy history
+- Supabase Auth and Postgres with RLS for account-scoped deal data
+- Browser `localStorage` fallback before sign-in
 
 ## Features
 
@@ -35,10 +37,10 @@ This repo currently contains a working MVP website with:
 - Deal cart with market value, buy percentage, suggested buy price, quantity,
   total payout, notes, condition, manual price override, remove, clear cart, and
   CSV export.
-- Checkout flow that stores recent buy lots in the browser.
+- Checkout flow that stores recent buy lots.
 - Recent buys view with partial sold-quantity tracking and gross profit by lot.
 - Quick buy percentage buttons: 70%, 75%, 80%, 85%, 90%, 95%, and 100%.
-- Cart and recent buy persistence across refreshes.
+- Cart and recent buy persistence across refreshes and login sessions.
 
 ## Setup
 
@@ -49,6 +51,19 @@ npm run dev
 ```
 
 Open `http://localhost:3000`.
+
+To enable account sync:
+
+1. Create a free Supabase project.
+2. Run `supabase/schema.sql` in the Supabase SQL editor.
+3. Copy the project URL and publishable key into `.env.local`:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=your_project_url
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your_publishable_key
+```
+
+Without those values, the app stays in local-only mode.
 
 The Pokemon TCG API can be used without a key at lower rate limits. For better
 limits, add a server-side key:
@@ -78,6 +93,18 @@ provider flow is:
 TCGplayer credentials must only be used through official API access and must
 remain in server-side environment variables. Never expose private provider keys
 in frontend code.
+
+## Supabase Data
+
+Signed-in users store data in four RLS-protected tables:
+
+1. `current_deals`: active cart and global buy percentage.
+2. `deal_lots`: checked-out buy lots.
+3. `deal_lot_items`: card snapshots inside each lot.
+4. `sale_records`: partial sold entries for lot items.
+
+Existing local cart/recent buy data is imported once after first sign-in, then
+cleared from local storage.
 
 ## Commands
 
