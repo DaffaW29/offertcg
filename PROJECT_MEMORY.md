@@ -39,3 +39,7 @@
 - Added portfolio analytics and inventory views derived from existing buy lot
   and sale data. No Supabase schema migration is needed for these views because
   they use `recentBuys`/`deal_lots`, `deal_lot_items`, and `sale_records`.
+- Added recent-buy history controls for lot search, open/sold/profit/loss
+  filters, sorting, and lot status badges. Account controls now live in a
+  profile popover opened from the header icon instead of a persistent header
+  panel.

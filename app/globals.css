@@ -156,6 +156,40 @@ h3 {
 .header-side {
   display: grid;
   gap: 0.75rem;
+  justify-items: stretch;
+}
+
+.profile-menu {
+  display: flex;
+  justify-content: flex-end;
+  position: relative;
+}
+
+.profile-button {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  color: var(--text);
+  min-height: 2.75rem;
+  padding: 0;
+  position: relative;
+  width: 2.75rem;
+}
+
+.profile-button:hover {
+  background: var(--panel-soft);
+}
+
+.profile-status {
+  background: var(--accent);
+  border: 2px solid var(--panel);
+  border-radius: 999px;
+  bottom: 0.32rem;
+  height: 0.68rem;
+  position: absolute;
+  right: 0.32rem;
+  width: 0.68rem;
 }
 
 .summary-card {
@@ -189,7 +223,7 @@ h3 {
   color: rgba(255, 255, 255, 0.78);
 }
 
-.auth-panel {
+.profile-popover {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -197,9 +231,14 @@ h3 {
   display: grid;
   gap: 0.75rem;
   padding: 1rem;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.55rem);
+  width: min(92vw, 360px);
+  z-index: 20;
 }
 
-.auth-panel strong {
+.profile-popover strong {
   display: block;
   overflow-wrap: anywhere;
 }
@@ -292,6 +331,7 @@ h3 {
 .filter-grid label,
 .percent-toolbar label,
 .sale-form label,
+.history-toolbar label,
 .inventory-toolbar label {
   color: var(--muted);
   display: grid;
@@ -712,6 +752,82 @@ tfoot td {
   margin-bottom: 1rem;
 }
 
+.history-toolbar {
+  align-items: end;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(260px, 1fr) minmax(180px, 0.28fr) minmax(420px, auto);
+  margin-bottom: 1rem;
+  padding: 1rem;
+}
+
+.history-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.history-filters button {
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-weight: 900;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.history-filters button.active,
+.history-filters button:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+.status-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.status-badge {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1;
+  padding: 0.3rem 0.48rem;
+}
+
+.status-badge.open {
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+}
+
+.status-badge.sold {
+  background: #e6edf5;
+  color: var(--blue);
+}
+
+.status-badge.profit {
+  background: #dff2e8;
+  color: var(--accent-dark);
+}
+
+.status-badge.loss {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.status-badge.neutral {
+  background: var(--panel-soft);
+  color: var(--muted);
+}
+
 .analytics-view,
 .inventory-view {
   display: grid;
@@ -982,6 +1098,7 @@ tfoot td {
 @media (max-width: 1180px) {
   .app-header,
   .analytics-grid,
+  .history-toolbar,
   .recent-grid,
   .workspace-grid,
   .search-form {
@@ -1009,6 +1126,7 @@ tfoot td {
   .summary-grid,
   .analytics-summary,
   .filter-grid,
+  .history-toolbar,
   .inventory-toolbar,
   .lot-item-stats,
   .lot-metrics,
@@ -1026,6 +1144,7 @@ tfoot td {
   }
 
   .cart-actions,
+  .history-filters,
   .pagination-controls,
   .sale-form,
   .segmented-control,
@@ -1034,6 +1153,7 @@ tfoot td {
   }
 
   .quick-buttons button,
+  .history-filters button,
   .pagination-controls button,
   .segmented-control button,
   .sale-form button,

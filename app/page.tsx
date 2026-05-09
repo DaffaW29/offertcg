@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CheckCircle,
+  CircleUserRound,
   Download,
   History,
   LogIn,
@@ -83,6 +84,14 @@ type ApiErrorResponse = {
 type ActiveTab = "current" | "recent" | "analytics" | "inventory";
 type InventoryMode = "unsold" | "all";
 type InventorySort = "newest" | "value" | "cost" | "name" | "spread";
+type LotHistoryFilter = "all" | "open" | "sold" | "profitable" | "loss";
+type LotHistorySort =
+  | "newest"
+  | "oldest"
+  | "profit"
+  | "roi"
+  | "remaining"
+  | "buy-cost";
 
 type SearchFilters = {
   query: string;
@@ -133,6 +142,34 @@ type InventoryRow = {
   spread: number;
 };
 
+type LotStatusBadge = {
+  label: string;
+  tone: "open" | "sold" | "profit" | "loss" | "neutral";
+};
+
+const LOT_HISTORY_FILTER_OPTIONS: {
+  label: string;
+  value: LotHistoryFilter;
+}[] = [
+  { label: "All", value: "all" },
+  { label: "Open", value: "open" },
+  { label: "Fully sold", value: "sold" },
+  { label: "Profitable", value: "profitable" },
+  { label: "At loss", value: "loss" }
+];
+
+const LOT_HISTORY_SORT_OPTIONS: {
+  label: string;
+  value: LotHistorySort;
+}[] = [
+  { label: "Newest", value: "newest" },
+  { label: "Oldest", value: "oldest" },
+  { label: "Profit", value: "profit" },
+  { label: "ROI", value: "roi" },
+  { label: "Remaining cards", value: "remaining" },
+  { label: "Buy cost", value: "buy-cost" }
+];
+
 const EMPTY_SEARCH_PAGINATION: SearchPagination = {
   page: DEFAULT_SEARCH_PAGE,
   pageSize: SEARCH_PAGE_SIZE,
@@ -174,13 +211,20 @@ export default function Home() {
   const [recentBuys, setRecentBuys] = useState<DealLot[]>([]);
   const [selectedLotId, setSelectedLotId] = useState<string | null>(null);
   const [saleDrafts, setSaleDrafts] = useState<Record<string, SaleDraft>>({});
+  const [lotHistoryQuery, setLotHistoryQuery] = useState("");
+  const [lotHistoryFilter, setLotHistoryFilter] =
+    useState<LotHistoryFilter>("all");
+  const [lotHistorySort, setLotHistorySort] =
+    useState<LotHistorySort>("newest");
   const [inventoryQuery, setInventoryQuery] = useState("");
   const [inventoryMode, setInventoryMode] = useState<InventoryMode>("unsold");
   const [inventorySort, setInventorySort] = useState<InventorySort>("value");
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [globalBuyPercent, setGlobalBuyPercent] =
     useState(DEFAULT_BUY_PERCENT);
   const [hasHydrated, setHasHydrated] = useState(false);
   const resultListRef = useRef<HTMLDivElement>(null);
+  const profilePopoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!supabaseClient) {
@@ -423,6 +467,36 @@ export default function Home() {
     resultListRef.current?.scrollTo({ top: 0 });
   }, [results]);
 
+  useEffect(() => {
+    if (!isProfileOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      if (
+        profilePopoverRef.current &&
+        event.target instanceof Node &&
+        !profilePopoverRef.current.contains(event.target)
+      ) {
+        setIsProfileOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsProfileOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isProfileOpen]);
+
   const totals = useMemo(() => {
     return cart.reduce(
       (summary, item) => {
@@ -435,16 +509,6 @@ export default function Home() {
       { marketValue: 0, payout: 0, quantity: 0 }
     );
   }, [cart]);
-  const selectedLot = useMemo(() => {
-    return (
-      recentBuys.find((lot) => lot.id === selectedLotId) ??
-      recentBuys[0] ??
-      null
-    );
-  }, [recentBuys, selectedLotId]);
-  const selectedLotTotals = useMemo(() => {
-    return selectedLot ? lotTotals(selectedLot) : null;
-  }, [selectedLot]);
   const portfolioSummary = useMemo(() => {
     return portfolioTotals(recentBuys);
   }, [recentBuys]);
@@ -463,6 +527,94 @@ export default function Home() {
       })
       .sort((first, second) => second.lotNet - first.lotNet);
   }, [recentBuys]);
+  const visibleLots = useMemo(() => {
+    const query = lotHistoryQuery.trim().toLowerCase();
+
+    return recentBuys
+      .filter((lot) => {
+        const totals = lotTotals(lot);
+        const lotNet = lotNetProfit(lot);
+
+        switch (lotHistoryFilter) {
+          case "open":
+            return totals.remainingQuantity > 0;
+          case "sold":
+            return totals.quantity > 0 && totals.remainingQuantity === 0;
+          case "profitable":
+            return lotNet > 0;
+          case "loss":
+            return (
+              lotNet < 0 &&
+              (totals.soldRevenue > 0 || totals.remainingQuantity === 0)
+            );
+          case "all":
+          default:
+            return true;
+        }
+      })
+      .filter((lot) => {
+        if (!query) {
+          return true;
+        }
+
+        return [
+          lot.label,
+          formatDateTime(lot.checkedOutAt),
+          ...lot.items.flatMap((item) => [
+            item.name,
+            item.setName,
+            item.cardNumber,
+            item.rarity,
+            item.condition,
+            item.variantLabel
+          ])
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
+      })
+      .sort((first, second) => {
+        const firstTotals = lotTotals(first);
+        const secondTotals = lotTotals(second);
+        const firstNet = lotNetProfit(first);
+        const secondNet = lotNetProfit(second);
+
+        switch (lotHistorySort) {
+          case "oldest":
+            return (
+              new Date(first.checkedOutAt).getTime() -
+              new Date(second.checkedOutAt).getTime()
+            );
+          case "profit":
+            return secondNet - firstNet;
+          case "roi":
+            return (
+              roiPercent(secondNet, secondTotals.buyCost) -
+              roiPercent(firstNet, firstTotals.buyCost)
+            );
+          case "remaining":
+            return secondTotals.remainingQuantity - firstTotals.remainingQuantity;
+          case "buy-cost":
+            return secondTotals.buyCost - firstTotals.buyCost;
+          case "newest":
+          default:
+            return (
+              new Date(second.checkedOutAt).getTime() -
+              new Date(first.checkedOutAt).getTime()
+            );
+        }
+      });
+  }, [lotHistoryFilter, lotHistoryQuery, lotHistorySort, recentBuys]);
+  const historySelectedLot = useMemo(() => {
+    return (
+      visibleLots.find((lot) => lot.id === selectedLotId) ??
+      visibleLots[0] ??
+      null
+    );
+  }, [selectedLotId, visibleLots]);
+  const historySelectedLotTotals = useMemo(() => {
+    return historySelectedLot ? lotTotals(historySelectedLot) : null;
+  }, [historySelectedLot]);
   const monthlyProfit = useMemo(() => {
     const months = new Map<string, MonthlyProfit>();
 
@@ -919,6 +1071,8 @@ export default function Home() {
   }
 
   function viewLot(lotId: string) {
+    setLotHistoryQuery("");
+    setLotHistoryFilter("all");
     setSelectedLotId(lotId);
     setActiveTab("recent");
   }
@@ -986,80 +1140,102 @@ export default function Home() {
           </p>
         </div>
         <div className="header-side">
+          <div className="profile-menu" ref={profilePopoverRef}>
+            <button
+              aria-expanded={isProfileOpen}
+              aria-haspopup="dialog"
+              aria-label="Open account menu"
+              className="profile-button"
+              type="button"
+              onClick={() => setIsProfileOpen((current) => !current)}
+            >
+              <CircleUserRound size={23} />
+              {session ? <span className="profile-status" /> : null}
+            </button>
+
+            {isProfileOpen ? (
+              <section
+                className="profile-popover"
+                role="dialog"
+                aria-label="Account sync"
+              >
+                <div>
+                  <p className="eyebrow">Account</p>
+                  {session ? (
+                    <strong>{session.user.email}</strong>
+                  ) : (
+                    <strong>{supabaseClient ? "Cloud sync" : "Local mode"}</strong>
+                  )}
+                </div>
+
+                {!isAuthReady ? (
+                  <p className="auth-message">Checking account...</p>
+                ) : session ? (
+                  <div className="auth-row">
+                    <span>{isCloudLoading ? "Syncing..." : cloudMessage}</span>
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      onClick={() => void signOut()}
+                      disabled={isAuthSubmitting}
+                    >
+                      <LogOut size={16} />
+                      Sign out
+                    </button>
+                  </div>
+                ) : supabaseClient ? (
+                  <form className="auth-form" onSubmit={handleAuthSubmit}>
+                    <input
+                      type="email"
+                      value={authEmail}
+                      onChange={(event) => setAuthEmail(event.target.value)}
+                      placeholder="Email"
+                      autoComplete="email"
+                    />
+                    <input
+                      type="password"
+                      value={authPassword}
+                      onChange={(event) => setAuthPassword(event.target.value)}
+                      placeholder="Password"
+                      autoComplete="current-password"
+                    />
+                    <div className="auth-actions">
+                      <button
+                        className="secondary-button"
+                        type="submit"
+                        disabled={isAuthSubmitting}
+                      >
+                        <LogIn size={16} />
+                        Log in
+                      </button>
+                      <button
+                        className="ghost-button"
+                        type="button"
+                        onClick={() => void submitAuth("signup")}
+                        disabled={isAuthSubmitting}
+                      >
+                        Sign up
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <p className="auth-message">
+                    Add Supabase env vars to enable account sync.
+                  </p>
+                )}
+
+                {authMessage ? (
+                  <p className="auth-message">{authMessage}</p>
+                ) : null}
+              </section>
+            ) : null}
+          </div>
+
           <div className="summary-grid" aria-label="Current deal totals">
             <SummaryMetric label="Market value" value={formatCurrency(totals.marketValue)} />
             <SummaryMetric label="Suggested payout" value={formatCurrency(totals.payout)} strong />
             <SummaryMetric label="Cards" value={totals.quantity.toString()} />
           </div>
-
-          <section className="auth-panel" aria-label="Account sync">
-            <div>
-              <p className="eyebrow">Account</p>
-              {session ? (
-                <strong>{session.user.email}</strong>
-              ) : (
-                <strong>{supabaseClient ? "Cloud sync" : "Local mode"}</strong>
-              )}
-            </div>
-
-            {!isAuthReady ? (
-              <p className="auth-message">Checking account...</p>
-            ) : session ? (
-              <div className="auth-row">
-                <span>{isCloudLoading ? "Syncing..." : cloudMessage}</span>
-                <button
-                  className="ghost-button"
-                  type="button"
-                  onClick={() => void signOut()}
-                  disabled={isAuthSubmitting}
-                >
-                  <LogOut size={16} />
-                  Sign out
-                </button>
-              </div>
-            ) : supabaseClient ? (
-              <form className="auth-form" onSubmit={handleAuthSubmit}>
-                <input
-                  type="email"
-                  value={authEmail}
-                  onChange={(event) => setAuthEmail(event.target.value)}
-                  placeholder="Email"
-                  autoComplete="email"
-                />
-                <input
-                  type="password"
-                  value={authPassword}
-                  onChange={(event) => setAuthPassword(event.target.value)}
-                  placeholder="Password"
-                  autoComplete="current-password"
-                />
-                <div className="auth-actions">
-                  <button
-                    className="secondary-button"
-                    type="submit"
-                    disabled={isAuthSubmitting}
-                  >
-                    <LogIn size={16} />
-                    Log in
-                  </button>
-                  <button
-                    className="ghost-button"
-                    type="button"
-                    onClick={() => void submitAuth("signup")}
-                    disabled={isAuthSubmitting}
-                  >
-                    Sign up
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <p className="auth-message">
-                Add Supabase env vars to enable account sync.
-              </p>
-            )}
-
-            {authMessage ? <p className="auth-message">{authMessage}</p> : null}
-          </section>
         </div>
       </header>
 
@@ -1576,10 +1752,58 @@ export default function Home() {
             />
           </div>
 
+          {recentBuys.length > 0 ? (
+            <div className="history-toolbar">
+              <label>
+                Search lots
+                <input
+                  value={lotHistoryQuery}
+                  onChange={(event) => setLotHistoryQuery(event.target.value)}
+                  placeholder="Lot, card, set, condition..."
+                />
+              </label>
+              <label>
+                Sort by
+                <select
+                  value={lotHistorySort}
+                  onChange={(event) =>
+                    setLotHistorySort(event.target.value as LotHistorySort)
+                  }
+                >
+                  {LOT_HISTORY_SORT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="history-filters" aria-label="Lot history filter">
+                {LOT_HISTORY_FILTER_OPTIONS.map((option) => (
+                  <button
+                    className={
+                      lotHistoryFilter === option.value ? "active" : ""
+                    }
+                    key={option.value}
+                    type="button"
+                    onClick={() => setLotHistoryFilter(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           {recentBuys.length === 0 ? (
             <section className="panel">
               <div className="empty-state">
                 <span>Checkout a deal cart to start tracking recent buys.</span>
+              </div>
+            </section>
+          ) : visibleLots.length === 0 ? (
+            <section className="panel">
+              <div className="empty-state">
+                <span>No lots match the current history filters.</span>
               </div>
             </section>
           ) : (
@@ -1592,13 +1816,15 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="lot-list">
-                  {recentBuys.map((lot) => {
+                  {visibleLots.map((lot) => {
                     const totals = lotTotals(lot);
+                    const lotNet = lotNetProfit(lot);
+                    const badges = lotStatusBadges(lot);
 
                     return (
                       <button
                         className={
-                          selectedLot?.id === lot.id
+                          historySelectedLot?.id === lot.id
                             ? "lot-list-item active"
                             : "lot-list-item"
                         }
@@ -1610,9 +1836,20 @@ export default function Home() {
                           <strong>{lot.label}</strong>
                           <small>{formatDateTime(lot.checkedOutAt)}</small>
                         </span>
+                        <span className="status-badges">
+                          {badges.map((badge) => (
+                            <span
+                              className={`status-badge ${badge.tone}`}
+                              key={badge.label}
+                            >
+                              {badge.label}
+                            </span>
+                          ))}
+                        </span>
                         <span>
                           {totals.remainingQuantity} left ·{" "}
-                          {formatCurrency(totals.grossProfit)}
+                          {formatCurrency(lotNet)} net ·{" "}
+                          {formatPercent(roiPercent(lotNet, totals.buyCost))}
                         </span>
                       </button>
                     );
@@ -1620,40 +1857,45 @@ export default function Home() {
                 </div>
               </aside>
 
-              {selectedLot && selectedLotTotals ? (
+              {historySelectedLot && historySelectedLotTotals ? (
                 <section className="panel lot-detail-panel">
                   <div className="panel-heading lot-detail-heading">
                     <div>
                       <p className="eyebrow">Lot detail</p>
-                      <h2>{selectedLot.label}</h2>
+                      <h2>{historySelectedLot.label}</h2>
                       <p className="muted">
-                        Checked out {formatDateTime(selectedLot.checkedOutAt)}
+                        Checked out{" "}
+                        {formatDateTime(historySelectedLot.checkedOutAt)}
                       </p>
                     </div>
                     <div className="lot-metrics" aria-label="Selected lot totals">
                       <SummaryMetric
                         label="Buy cost"
-                        value={formatCurrency(selectedLotTotals.buyCost)}
+                        value={formatCurrency(historySelectedLotTotals.buyCost)}
                       />
                       <SummaryMetric
                         label="Sold"
-                        value={formatCurrency(selectedLotTotals.soldRevenue)}
+                        value={formatCurrency(
+                          historySelectedLotTotals.soldRevenue
+                        )}
                       />
                       <SummaryMetric
                         label="Lot net"
-                        value={formatCurrency(lotNetProfit(selectedLot))}
+                        value={formatCurrency(lotNetProfit(historySelectedLot))}
                         strong
                       />
                       <SummaryMetric
                         label="Sold profit"
-                        value={formatCurrency(selectedLotTotals.grossProfit)}
+                        value={formatCurrency(
+                          historySelectedLotTotals.grossProfit
+                        )}
                       />
                     </div>
                   </div>
 
                   <div className="lot-items">
-                    {selectedLot.items.map((item) => {
-                      const key = saleDraftKey(selectedLot.id, item.id);
+                    {historySelectedLot.items.map((item) => {
+                      const key = saleDraftKey(historySelectedLot.id, item.id);
                       const draft = saleDrafts[key] ?? {
                         quantity: "",
                         saleTotal: ""
@@ -1744,7 +1986,9 @@ export default function Home() {
                             <button
                               className="secondary-button"
                               type="button"
-                              onClick={() => markItemSold(selectedLot.id, item.id)}
+                              onClick={() =>
+                                markItemSold(historySelectedLot.id, item.id)
+                              }
                               disabled={!canRecordSale}
                             >
                               <CheckCircle size={17} />
@@ -2082,6 +2326,29 @@ function LotPerformanceCard({
       </button>
     </article>
   );
+}
+
+function lotStatusBadges(lot: DealLot): LotStatusBadge[] {
+  const totals = lotTotals(lot);
+  const lotNet = lotNetProfit(lot);
+  const badges: LotStatusBadge[] = [
+    totals.remainingQuantity === 0
+      ? { label: "Sold out", tone: "sold" }
+      : { label: "Open", tone: "open" }
+  ];
+
+  if (lotNet > 0) {
+    badges.push({ label: "Profit", tone: "profit" });
+  } else if (
+    lotNet < 0 &&
+    (totals.soldRevenue > 0 || totals.remainingQuantity === 0)
+  ) {
+    badges.push({ label: "Loss", tone: "loss" });
+  } else if (totals.soldRevenue > 0) {
+    badges.push({ label: "Break even", tone: "neutral" });
+  }
+
+  return badges;
 }
 
 function readStoredDeal(): StoredDeal {

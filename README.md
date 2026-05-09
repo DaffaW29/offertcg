@@ -17,6 +17,7 @@ This repo currently contains a working MVP website with:
 - Supabase email/password auth with cloud persistence for signed-in users.
 - Browser `localStorage` fallback and one-time import into Supabase after first
   sign-in.
+- Compact profile menu for account sync controls.
 
 ## Stack
 
@@ -39,6 +40,7 @@ This repo currently contains a working MVP website with:
   CSV export.
 - Checkout flow that stores recent buy lots.
 - Recent buys view with partial sold-quantity tracking and gross profit by lot.
+- Recent buy history search, status filters, sort controls, and lot badges.
 - Portfolio analytics dashboard with realized profit, ROI, sell-through, lot
   performance, and monthly profit bars.
 - Inventory view for unsold cards across all buy lots with search, sorting, and
