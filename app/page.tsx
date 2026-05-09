@@ -24,6 +24,7 @@ import {
   type DealItem,
   effectiveMarketPrice,
   grossProfit,
+  lotNetProfit,
   lotTotals,
   remainingQuantity,
   roundCurrency,
@@ -1099,9 +1100,13 @@ export default function Home() {
                         value={formatCurrency(selectedLotTotals.soldRevenue)}
                       />
                       <SummaryMetric
-                        label="Profit"
-                        value={formatCurrency(selectedLotTotals.grossProfit)}
+                        label="Lot net"
+                        value={formatCurrency(lotNetProfit(selectedLot))}
                         strong
+                      />
+                      <SummaryMetric
+                        label="Sold profit"
+                        value={formatCurrency(selectedLotTotals.grossProfit)}
                       />
                     </div>
                   </div>
@@ -1153,7 +1158,7 @@ export default function Home() {
                               value={formatCurrency(soldRevenue(item))}
                             />
                             <MetricStack
-                              label="Profit"
+                              label="Sold profit"
                               value={formatCurrency(grossProfit(item))}
                             />
                           </div>

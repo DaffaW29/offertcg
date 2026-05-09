@@ -108,3 +108,8 @@ export function lotTotals(lot: DealLot) {
     }
   );
 }
+
+export function lotNetProfit(lot: DealLot) {
+  const totals = lotTotals(lot);
+  return roundCurrency(totals.soldRevenue - totals.buyCost);
+}

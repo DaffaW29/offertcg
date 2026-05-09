@@ -26,3 +26,5 @@
 - Added browser-local recent buy lots under `offertcg-recent-buys-v1`,
   checkout from the active cart, partial sold-quantity tracking, and gross
   profit summaries by lot.
+- Clarified selected lot detail profit metrics: `Lot net` is sold revenue minus
+  total buy cost, while `Sold profit` remains realized profit on sold quantities.

@@ -719,8 +719,8 @@ tfoot td {
 .lot-metrics {
   display: grid;
   gap: 0.6rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  min-width: min(100%, 520px);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  min-width: min(100%, 640px);
 }
 
 .lot-metrics .summary-card {
