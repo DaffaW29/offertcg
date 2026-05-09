@@ -39,6 +39,10 @@ This repo currently contains a working MVP website with:
   CSV export.
 - Checkout flow that stores recent buy lots.
 - Recent buys view with partial sold-quantity tracking and gross profit by lot.
+- Portfolio analytics dashboard with realized profit, ROI, sell-through, lot
+  performance, and monthly profit bars.
+- Inventory view for unsold cards across all buy lots with search, sorting, and
+  lot navigation.
 - Quick buy percentage buttons: 70%, 75%, 80%, 85%, 90%, 95%, and 100%.
 - Cart and recent buy persistence across refreshes and login sessions.
 

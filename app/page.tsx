@@ -2,6 +2,8 @@
 
 import Image from "next/image";
 import {
+  BarChart3,
+  Boxes,
   ChevronLeft,
   ChevronRight,
   CheckCircle,
@@ -29,8 +31,13 @@ import {
   grossProfit,
   lotNetProfit,
   lotTotals,
+  portfolioTotals,
+  remainingCost,
+  remainingMarketValue,
   remainingQuantity,
+  remainingSpread,
   roundCurrency,
+  roiPercent,
   suggestedBuyPrice,
   soldRevenue,
   totalPayout
@@ -60,6 +67,9 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD"
 });
+const percentFormatter = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 1
+});
 
 type StoredDeal = {
   cart?: DealItem[];
@@ -70,7 +80,9 @@ type ApiErrorResponse = {
   error?: string;
 };
 
-type ActiveTab = "current" | "recent";
+type ActiveTab = "current" | "recent" | "analytics" | "inventory";
+type InventoryMode = "unsold" | "all";
+type InventorySort = "newest" | "value" | "cost" | "name" | "spread";
 
 type SearchFilters = {
   query: string;
@@ -92,6 +104,34 @@ type SaleDraft = {
 };
 
 type AuthMode = "login" | "signup";
+
+type LotPerformance = {
+  lot: DealLot;
+  totals: ReturnType<typeof lotTotals>;
+  lotNet: number;
+  portfolioRoi: number;
+};
+
+type MonthlyProfit = {
+  key: string;
+  label: string;
+  revenue: number;
+  cost: number;
+  profit: number;
+  quantity: number;
+};
+
+type InventoryRow = {
+  id: string;
+  lotId: string;
+  lotLabel: string;
+  checkedOutAt: string;
+  item: DealLotItem;
+  remaining: number;
+  buyCost: number;
+  marketValue: number;
+  spread: number;
+};
 
 const EMPTY_SEARCH_PAGINATION: SearchPagination = {
   page: DEFAULT_SEARCH_PAGE,
@@ -134,6 +174,9 @@ export default function Home() {
   const [recentBuys, setRecentBuys] = useState<DealLot[]>([]);
   const [selectedLotId, setSelectedLotId] = useState<string | null>(null);
   const [saleDrafts, setSaleDrafts] = useState<Record<string, SaleDraft>>({});
+  const [inventoryQuery, setInventoryQuery] = useState("");
+  const [inventoryMode, setInventoryMode] = useState<InventoryMode>("unsold");
+  const [inventorySort, setInventorySort] = useState<InventorySort>("value");
   const [globalBuyPercent, setGlobalBuyPercent] =
     useState(DEFAULT_BUY_PERCENT);
   const [hasHydrated, setHasHydrated] = useState(false);
@@ -402,26 +445,126 @@ export default function Home() {
   const selectedLotTotals = useMemo(() => {
     return selectedLot ? lotTotals(selectedLot) : null;
   }, [selectedLot]);
-  const recentBuySummary = useMemo(() => {
-    return recentBuys.reduce(
-      (summary, lot) => {
-        const totals = lotTotals(lot);
-        summary.buyCost += totals.buyCost;
-        summary.soldRevenue += totals.soldRevenue;
-        summary.grossProfit += totals.grossProfit;
-        summary.remainingQuantity += totals.remainingQuantity;
-        summary.lots += 1;
-        return summary;
-      },
-      {
-        buyCost: 0,
-        soldRevenue: 0,
-        grossProfit: 0,
-        remainingQuantity: 0,
-        lots: 0
-      }
-    );
+  const portfolioSummary = useMemo(() => {
+    return portfolioTotals(recentBuys);
   }, [recentBuys]);
+  const lotPerformance = useMemo(() => {
+    return recentBuys
+      .map<LotPerformance>((lot) => {
+        const totals = lotTotals(lot);
+        const lotNet = lotNetProfit(lot);
+
+        return {
+          lot,
+          totals,
+          lotNet,
+          portfolioRoi: roiPercent(lotNet, totals.buyCost)
+        };
+      })
+      .sort((first, second) => second.lotNet - first.lotNet);
+  }, [recentBuys]);
+  const monthlyProfit = useMemo(() => {
+    const months = new Map<string, MonthlyProfit>();
+
+    recentBuys.forEach((lot) => {
+      lot.items.forEach((item) => {
+        item.sales.forEach((sale) => {
+          const soldAt = new Date(sale.soldAt);
+          const key = Number.isNaN(soldAt.getTime())
+            ? "unknown"
+            : `${soldAt.getFullYear()}-${String(soldAt.getMonth() + 1).padStart(2, "0")}`;
+          const label =
+            key === "unknown"
+              ? "Unknown"
+              : soldAt.toLocaleDateString("en-US", {
+                  month: "short",
+                  year: "numeric"
+                });
+          const current = months.get(key) ?? {
+            key,
+            label,
+            revenue: 0,
+            cost: 0,
+            profit: 0,
+            quantity: 0
+          };
+
+          current.revenue += sale.saleTotal;
+          current.cost += item.buyUnitPrice * sale.quantity;
+          current.quantity += sale.quantity;
+          current.profit = current.revenue - current.cost;
+          months.set(key, current);
+        });
+      });
+    });
+
+    return [...months.values()]
+      .map((month) => ({
+        ...month,
+        revenue: roundCurrency(month.revenue),
+        cost: roundCurrency(month.cost),
+        profit: roundCurrency(month.profit)
+      }))
+      .sort((first, second) => first.key.localeCompare(second.key));
+  }, [recentBuys]);
+  const maxMonthlyProfit = useMemo(() => {
+    return Math.max(1, ...monthlyProfit.map((month) => Math.abs(month.profit)));
+  }, [monthlyProfit]);
+  const inventoryRows = useMemo(() => {
+    const query = inventoryQuery.trim().toLowerCase();
+
+    return recentBuys
+      .flatMap<InventoryRow>((lot) =>
+        lot.items.map((item) => ({
+          id: `${lot.id}|${item.id}`,
+          lotId: lot.id,
+          lotLabel: lot.label,
+          checkedOutAt: lot.checkedOutAt,
+          item,
+          remaining: remainingQuantity(item),
+          buyCost: remainingCost(item),
+          marketValue: remainingMarketValue(item),
+          spread: remainingSpread(item)
+        }))
+      )
+      .filter((row) => inventoryMode === "all" || row.remaining > 0)
+      .filter((row) => {
+        if (!query) {
+          return true;
+        }
+
+        return [
+          row.item.name,
+          row.item.setName,
+          row.item.cardNumber,
+          row.item.rarity,
+          row.item.condition,
+          row.item.variantLabel,
+          row.lotLabel
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
+      })
+      .sort((first, second) => {
+        switch (inventorySort) {
+          case "cost":
+            return second.buyCost - first.buyCost;
+          case "name":
+            return first.item.name.localeCompare(second.item.name);
+          case "spread":
+            return second.spread - first.spread;
+          case "value":
+            return second.marketValue - first.marketValue;
+          case "newest":
+          default:
+            return (
+              new Date(second.checkedOutAt).getTime() -
+              new Date(first.checkedOutAt).getTime()
+            );
+        }
+      });
+  }, [inventoryMode, inventoryQuery, inventorySort, recentBuys]);
   const totalPages = Math.max(
     DEFAULT_SEARCH_PAGE,
     Math.ceil(pagination.totalCount / pagination.pageSize)
@@ -775,6 +918,11 @@ export default function Home() {
     }
   }
 
+  function viewLot(lotId: string) {
+    setSelectedLotId(lotId);
+    setActiveTab("recent");
+  }
+
   function exportCsv() {
     if (cart.length === 0) {
       return;
@@ -933,6 +1081,27 @@ export default function Home() {
           Recent Buys
           {recentBuys.length > 0 ? (
             <span className="tab-count">{recentBuys.length}</span>
+          ) : null}
+        </button>
+        <button
+          className={activeTab === "analytics" ? "active" : ""}
+          type="button"
+          onClick={() => setActiveTab("analytics")}
+        >
+          <BarChart3 size={17} />
+          Analytics
+        </button>
+        <button
+          className={activeTab === "inventory" ? "active" : ""}
+          type="button"
+          onClick={() => setActiveTab("inventory")}
+        >
+          <Boxes size={17} />
+          Inventory
+          {portfolioSummary.remainingQuantity > 0 ? (
+            <span className="tab-count">
+              {portfolioSummary.remainingQuantity}
+            </span>
           ) : null}
         </button>
       </nav>
@@ -1389,20 +1558,20 @@ export default function Home() {
         </section>
       </section>
         </>
-      ) : (
+      ) : activeTab === "recent" ? (
         <section className="recent-buys-view">
           <div className="summary-grid recent-summary" aria-label="Recent buy totals">
             <SummaryMetric
               label="Total buy cost"
-              value={formatCurrency(recentBuySummary.buyCost)}
+              value={formatCurrency(portfolioSummary.buyCost)}
             />
             <SummaryMetric
               label="Sold revenue"
-              value={formatCurrency(recentBuySummary.soldRevenue)}
+              value={formatCurrency(portfolioSummary.soldRevenue)}
             />
             <SummaryMetric
               label="Gross profit"
-              value={formatCurrency(recentBuySummary.grossProfit)}
+              value={formatCurrency(portfolioSummary.realizedProfit)}
               strong
             />
           </div>
@@ -1591,6 +1760,250 @@ export default function Home() {
             </section>
           )}
         </section>
+      ) : activeTab === "analytics" ? (
+        <section className="analytics-view">
+          {recentBuys.length === 0 ? (
+            <section className="panel">
+              <div className="empty-state">
+                <span>Checkout a deal cart to unlock portfolio analytics.</span>
+              </div>
+            </section>
+          ) : (
+            <>
+              <div className="analytics-summary" aria-label="Portfolio analytics">
+                <SummaryMetric
+                  label="Total spent"
+                  value={formatCurrency(portfolioSummary.buyCost)}
+                />
+                <SummaryMetric
+                  label="Sold revenue"
+                  value={formatCurrency(portfolioSummary.soldRevenue)}
+                />
+                <SummaryMetric
+                  label="Realized profit"
+                  value={formatCurrency(portfolioSummary.realizedProfit)}
+                  strong
+                />
+                <SummaryMetric
+                  label="Lot net"
+                  value={formatCurrency(portfolioSummary.lotNet)}
+                />
+                <SummaryMetric
+                  label="Realized ROI"
+                  value={formatPercent(portfolioSummary.realizedRoi)}
+                />
+                <SummaryMetric
+                  label="Sell-through"
+                  value={formatPercent(portfolioSummary.sellThroughRate)}
+                />
+                <SummaryMetric
+                  label="Inventory value"
+                  value={formatCurrency(portfolioSummary.remainingMarketValue)}
+                />
+                <SummaryMetric
+                  label="Inventory spread"
+                  value={formatCurrency(portfolioSummary.remainingSpread)}
+                />
+              </div>
+
+              <section className="analytics-grid">
+                <section className="panel analytics-panel">
+                  <div className="panel-heading">
+                    <div>
+                      <p className="eyebrow">Trend</p>
+                      <h2>Monthly profit</h2>
+                    </div>
+                    <span className="count-pill">{monthlyProfit.length} months</span>
+                  </div>
+
+                  {monthlyProfit.length === 0 ? (
+                    <div className="empty-state compact">
+                      <span>Record a sale to start the monthly profit chart.</span>
+                    </div>
+                  ) : (
+                    <div className="profit-bars">
+                      {monthlyProfit.slice(-8).map((month) => {
+                        const width = Math.max(
+                          4,
+                          (Math.abs(month.profit) / maxMonthlyProfit) * 100
+                        );
+
+                        return (
+                          <div className="profit-bar-row" key={month.key}>
+                            <span>{month.label}</span>
+                            <div className="profit-bar-track">
+                              <span
+                                className={
+                                  month.profit >= 0
+                                    ? "profit-bar positive"
+                                    : "profit-bar negative"
+                                }
+                                style={{ width: `${width}%` }}
+                              />
+                            </div>
+                            <strong>{formatCurrency(month.profit)}</strong>
+                            <small>
+                              {month.quantity} sold ·{" "}
+                              {formatCurrency(month.revenue)}
+                            </small>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+
+                <section className="panel analytics-panel">
+                  <div className="panel-heading">
+                    <div>
+                      <p className="eyebrow">Lots</p>
+                      <h2>Performance</h2>
+                    </div>
+                  </div>
+                  <div className="performance-grid">
+                    <LotPerformanceCard
+                      title="Best lot"
+                      performance={lotPerformance[0]}
+                      onViewLot={viewLot}
+                    />
+                    <LotPerformanceCard
+                      title="Weakest lot"
+                      performance={lotPerformance[lotPerformance.length - 1]}
+                      onViewLot={viewLot}
+                    />
+                  </div>
+                </section>
+              </section>
+            </>
+          )}
+        </section>
+      ) : (
+        <section className="inventory-view">
+          <section className="panel inventory-panel">
+            <div className="panel-heading inventory-heading">
+              <div>
+                <p className="eyebrow">Inventory</p>
+                <h2>Cards on hand</h2>
+              </div>
+              <span className="count-pill">{inventoryRows.length} rows</span>
+            </div>
+
+            <div className="inventory-toolbar">
+              <label>
+                Search inventory
+                <input
+                  value={inventoryQuery}
+                  onChange={(event) => setInventoryQuery(event.target.value)}
+                  placeholder="Card, set, lot, condition..."
+                />
+              </label>
+              <label>
+                Sort by
+                <select
+                  value={inventorySort}
+                  onChange={(event) =>
+                    setInventorySort(event.target.value as InventorySort)
+                  }
+                >
+                  <option value="value">Market value</option>
+                  <option value="cost">Remaining cost</option>
+                  <option value="spread">Potential spread</option>
+                  <option value="newest">Newest lot</option>
+                  <option value="name">Card name</option>
+                </select>
+              </label>
+              <div className="segmented-control" aria-label="Inventory mode">
+                <button
+                  className={inventoryMode === "unsold" ? "active" : ""}
+                  type="button"
+                  onClick={() => setInventoryMode("unsold")}
+                >
+                  Unsold
+                </button>
+                <button
+                  className={inventoryMode === "all" ? "active" : ""}
+                  type="button"
+                  onClick={() => setInventoryMode("all")}
+                >
+                  All
+                </button>
+              </div>
+            </div>
+
+            {recentBuys.length === 0 ? (
+              <div className="empty-state">
+                <span>Checkout a deal cart to start building inventory.</span>
+              </div>
+            ) : inventoryRows.length === 0 ? (
+              <div className="empty-state">
+                <span>No inventory rows match the current filters.</span>
+              </div>
+            ) : (
+              <div className="table-wrap">
+                <table className="inventory-table">
+                  <thead>
+                    <tr>
+                      <th>Card</th>
+                      <th>Lot</th>
+                      <th>Bought / Left</th>
+                      <th>Remaining cost</th>
+                      <th>Market value</th>
+                      <th>Spread</th>
+                      <th aria-label="Actions" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inventoryRows.map((row) => (
+                      <tr key={row.id}>
+                        <td className="deal-card-cell">
+                          <CardThumb card={row.item} compact />
+                          <div>
+                            <strong>{row.item.name}</strong>
+                            <span>
+                              {row.item.setName} #{row.item.cardNumber}
+                            </span>
+                            <span className="muted">
+                              {row.item.variantLabel} · {row.item.condition}
+                            </span>
+                          </div>
+                        </td>
+                        <td>
+                          <div className="price-stack">
+                            <strong>{row.lotLabel}</strong>
+                            <span>{formatDateTime(row.checkedOutAt)}</span>
+                          </div>
+                        </td>
+                        <td>
+                          {row.item.quantity} / <strong>{row.remaining}</strong>
+                        </td>
+                        <td>{formatCurrency(row.buyCost)}</td>
+                        <td>{formatCurrency(row.marketValue)}</td>
+                        <td>
+                          <strong
+                            className={
+                              row.spread >= 0 ? "positive-value" : "negative-value"
+                            }
+                          >
+                            {formatCurrency(row.spread)}
+                          </strong>
+                        </td>
+                        <td>
+                          <button
+                            className="ghost-button"
+                            type="button"
+                            onClick={() => viewLot(row.lotId)}
+                          >
+                            View lot
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </section>
       )}
     </main>
   );
@@ -1625,6 +2038,49 @@ function MetricStack({
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
+  );
+}
+
+function LotPerformanceCard({
+  title,
+  performance,
+  onViewLot
+}: {
+  title: string;
+  performance?: LotPerformance;
+  onViewLot: (lotId: string) => void;
+}) {
+  if (!performance) {
+    return null;
+  }
+
+  return (
+    <article className="performance-card">
+      <div>
+        <span>{title}</span>
+        <h3>{performance.lot.label}</h3>
+        <p>{formatDateTime(performance.lot.checkedOutAt)}</p>
+      </div>
+      <div className="performance-metrics">
+        <MetricStack label="Lot net" value={formatCurrency(performance.lotNet)} />
+        <MetricStack
+          label="Realized"
+          value={formatCurrency(performance.totals.grossProfit)}
+        />
+        <MetricStack label="ROI" value={formatPercent(performance.portfolioRoi)} />
+        <MetricStack
+          label="Left"
+          value={performance.totals.remainingQuantity.toString()}
+        />
+      </div>
+      <button
+        className="ghost-button"
+        type="button"
+        onClick={() => onViewLot(performance.lot.id)}
+      >
+        View lot
+      </button>
+    </article>
   );
 }
 
@@ -1738,6 +2194,10 @@ function appendOptionalParam(
 
 function formatCurrency(value: number) {
   return currencyFormatter.format(roundCurrency(value));
+}
+
+function formatPercent(value: number) {
+  return `${percentFormatter.format(roundCurrency(value))}%`;
 }
 
 function formatDate(value: string) {

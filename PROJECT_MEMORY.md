@@ -36,3 +36,6 @@
   `lib/supabase`.
 - Existing local cart/recent buy data imports once after first sign-in, then
   signed-in persistence uses Supabase while unsigned users keep local fallback.
+- Added portfolio analytics and inventory views derived from existing buy lot
+  and sale data. No Supabase schema migration is needed for these views because
+  they use `recentBuys`/`deal_lots`, `deal_lot_items`, and `sale_records`.
