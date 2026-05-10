@@ -81,3 +81,6 @@
 - Added README screenshot gallery assets under `docs/screenshots/` covering the
   landing hero, deal builder, recent buys, analytics dashboard, and inventory
   view.
+- Added inline recent-buy lot renaming. Local renames persist through existing
+  recent-buy storage, while signed-in renames update `deal_lots.label` through
+  Supabase before the local label changes.

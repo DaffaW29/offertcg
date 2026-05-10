@@ -57,8 +57,8 @@ This repo currently contains a working MVP website with:
   total payout, notes, condition, manual price override, remove, clear cart, and
   CSV export.
 - Checkout flow that stores recent buy lots.
-- Recent buys view with partial sold-quantity tracking, gross profit by lot,
-  and confirmed lot deletion.
+- Recent buys view with lot renaming, partial sold-quantity tracking, gross
+  profit by lot, and confirmed lot deletion.
 - Recent buy history search, status filters, sort controls, and lot badges.
 - Portfolio analytics dashboard with realized profit, ROI, sell-through, lot
   performance, and monthly profit bars.

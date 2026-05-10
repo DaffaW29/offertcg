@@ -173,6 +173,23 @@ export async function deleteCloudLot(
   }
 }
 
+export async function renameCloudLot(
+  supabase: Supabase,
+  userId: string,
+  lotId: string,
+  label: string
+) {
+  const { error } = await supabase
+    .from("deal_lots")
+    .update({ label })
+    .eq("id", lotId)
+    .eq("user_id", userId);
+
+  if (error) {
+    throw error;
+  }
+}
+
 export async function saveCloudSale(
   supabase: Supabase,
   userId: string,

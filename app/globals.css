@@ -1257,6 +1257,37 @@ tfoot td {
   min-width: 0;
 }
 
+.lot-title-actions,
+.lot-rename-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.lot-rename-form {
+  display: grid;
+  gap: 0.45rem;
+  min-width: min(100%, 560px);
+}
+
+.lot-rename-form label {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.lot-rename-controls input {
+  min-width: min(22rem, 100%);
+  width: auto;
+}
+
+.input-error {
+  color: var(--danger);
+  font-size: 0.82rem;
+  font-weight: 800;
+  margin: 0;
+}
+
 .lot-metrics {
   display: grid;
   gap: 0.6rem;
@@ -1495,6 +1526,8 @@ tfoot td {
 
   .cart-actions,
   .history-filters,
+  .lot-title-actions,
+  .lot-rename-controls,
   .pagination-controls,
   .sale-form,
   .segmented-control,
@@ -1504,6 +1537,9 @@ tfoot td {
 
   .quick-buttons button,
   .history-filters button,
+  .lot-title-actions button,
+  .lot-rename-controls button,
+  .lot-rename-controls input,
   .pagination-controls button,
   .segmented-control button,
   .sale-form button,

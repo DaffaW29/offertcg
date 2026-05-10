@@ -14,6 +14,7 @@ import {
   LogIn,
   LogOut,
   Loader2,
+  Pencil,
   Plus,
   RotateCcw,
   Search,
@@ -56,6 +57,7 @@ import {
   deleteCloudLot,
   loadCloudDealState,
   loadCloudLots,
+  renameCloudLot,
   saveCloudDealState,
   saveCloudLot,
   saveCloudLots,
@@ -67,6 +69,7 @@ const QUICK_PERCENTAGES = [70, 75, 80, 85, 90, 95, 100];
 const STORAGE_KEY = "offertcg-current-deal-v1";
 const RECENT_BUYS_STORAGE_KEY = "offertcg-recent-buys-v1";
 const DEFAULT_BUY_PERCENT = QUICK_PERCENTAGES[0];
+const MAX_LOT_LABEL_LENGTH = 80;
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -319,6 +322,10 @@ export default function Home() {
   const [recentBuys, setRecentBuys] = useState<DealLot[]>([]);
   const [selectedLotId, setSelectedLotId] = useState<string | null>(null);
   const [saleDrafts, setSaleDrafts] = useState<Record<string, SaleDraft>>({});
+  const [editingLotId, setEditingLotId] = useState<string | null>(null);
+  const [lotNameDraft, setLotNameDraft] = useState("");
+  const [lotRenameError, setLotRenameError] = useState("");
+  const [isRenamingLot, setIsRenamingLot] = useState(false);
   const [lotHistoryQuery, setLotHistoryQuery] = useState("");
   const [lotHistoryFilter, setLotHistoryFilter] =
     useState<LotHistoryFilter>("all");
@@ -1238,6 +1245,78 @@ export default function Home() {
     }
   }
 
+  function startRenamingLot(lot: DealLot) {
+    setEditingLotId(lot.id);
+    setLotNameDraft(lot.label);
+    setLotRenameError("");
+  }
+
+  function cancelRenamingLot() {
+    setEditingLotId(null);
+    setLotNameDraft("");
+    setLotRenameError("");
+    setIsRenamingLot(false);
+  }
+
+  async function saveLotRename(
+    event: FormEvent<HTMLFormElement>,
+    lotId: string
+  ) {
+    event.preventDefault();
+
+    const lot = recentBuys.find((currentLot) => currentLot.id === lotId);
+    if (!lot) {
+      cancelRenamingLot();
+      return;
+    }
+
+    const nextLabel = lotNameDraft.trim();
+    if (!nextLabel) {
+      setLotRenameError("Enter a lot name.");
+      return;
+    }
+
+    if (nextLabel.length > MAX_LOT_LABEL_LENGTH) {
+      setLotRenameError(
+        `Keep the lot name under ${MAX_LOT_LABEL_LENGTH} characters.`
+      );
+      return;
+    }
+
+    if (nextLabel === lot.label) {
+      cancelRenamingLot();
+      return;
+    }
+
+    if (supabaseClient && session) {
+      if (!hasCloudDataLoaded) {
+        setLotRenameError("Wait for cloud sync to finish before renaming.");
+        return;
+      }
+
+      setIsRenamingLot(true);
+      try {
+        await renameCloudLot(supabaseClient, session.user.id, lotId, nextLabel);
+        setCloudMessage("Renamed lot.");
+      } catch (error) {
+        setLotRenameError(
+          error instanceof Error
+            ? `Unable to rename lot: ${error.message}`
+            : "Unable to rename lot."
+        );
+        setIsRenamingLot(false);
+        return;
+      }
+    }
+
+    setRecentBuys((current) =>
+      current.map((lot) =>
+        lot.id === lotId ? { ...lot, label: nextLabel } : lot
+      )
+    );
+    cancelRenamingLot();
+  }
+
   async function deleteLot(lotId: string) {
     const lot = recentBuys.find((currentLot) => currentLot.id === lotId);
     if (!lot) {
@@ -1269,6 +1348,9 @@ export default function Home() {
       (currentLot) => currentLot.id !== lotId
     );
 
+    if (editingLotId === lotId) {
+      cancelRenamingLot();
+    }
     setRecentBuys(remainingLots);
     setSelectedLotId((currentLotId) =>
       currentLotId === lotId ? remainingLots[0]?.id ?? null : currentLotId
@@ -2172,22 +2254,87 @@ export default function Home() {
                 <section className="panel lot-detail-panel">
                   <div className="panel-heading lot-detail-heading">
                     <div className="lot-detail-title">
-                      <div>
-                        <p className="eyebrow">Lot detail</p>
-                        <h2>{historySelectedLot.label}</h2>
-                        <p className="muted">
-                          Checked out{" "}
-                          {formatDateTime(historySelectedLot.checkedOutAt)}
-                        </p>
-                      </div>
-                      <button
-                        className="ghost-button danger"
-                        type="button"
-                        onClick={() => void deleteLot(historySelectedLot.id)}
-                      >
-                        <Trash2 size={17} />
-                        Delete lot
-                      </button>
+                      {editingLotId === historySelectedLot.id ? (
+                        <form
+                          className="lot-rename-form"
+                          onSubmit={(event) =>
+                            void saveLotRename(event, historySelectedLot.id)
+                          }
+                        >
+                          <p className="eyebrow">Lot detail</p>
+                          <label htmlFor={`lot-name-${historySelectedLot.id}`}>
+                            Lot name
+                          </label>
+                          <div className="lot-rename-controls">
+                            <input
+                              id={`lot-name-${historySelectedLot.id}`}
+                              maxLength={MAX_LOT_LABEL_LENGTH}
+                              value={lotNameDraft}
+                              onChange={(event) => {
+                                setLotNameDraft(event.target.value);
+                                setLotRenameError("");
+                              }}
+                              autoFocus
+                              disabled={isRenamingLot}
+                            />
+                            <button
+                              className="secondary-button"
+                              type="submit"
+                              disabled={
+                                isRenamingLot || lotNameDraft.trim().length === 0
+                              }
+                            >
+                              <CheckCircle size={17} />
+                              Save
+                            </button>
+                            <button
+                              className="ghost-button"
+                              type="button"
+                              onClick={cancelRenamingLot}
+                              disabled={isRenamingLot}
+                            >
+                              <X size={17} />
+                              Cancel
+                            </button>
+                          </div>
+                          {lotRenameError ? (
+                            <p className="input-error">{lotRenameError}</p>
+                          ) : null}
+                          <p className="muted">
+                            Checked out{" "}
+                            {formatDateTime(historySelectedLot.checkedOutAt)}
+                          </p>
+                        </form>
+                      ) : (
+                        <div>
+                          <p className="eyebrow">Lot detail</p>
+                          <h2>{historySelectedLot.label}</h2>
+                          <p className="muted">
+                            Checked out{" "}
+                            {formatDateTime(historySelectedLot.checkedOutAt)}
+                          </p>
+                        </div>
+                      )}
+                      {editingLotId === historySelectedLot.id ? null : (
+                        <div className="lot-title-actions">
+                          <button
+                            className="ghost-button"
+                            type="button"
+                            onClick={() => startRenamingLot(historySelectedLot)}
+                          >
+                            <Pencil size={17} />
+                            Rename
+                          </button>
+                          <button
+                            className="ghost-button danger"
+                            type="button"
+                            onClick={() => void deleteLot(historySelectedLot.id)}
+                          >
+                            <Trash2 size={17} />
+                            Delete lot
+                          </button>
+                        </div>
+                      )}
                     </div>
                     <div className="lot-metrics" aria-label="Selected lot totals">
                       <SummaryMetric
