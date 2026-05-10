@@ -64,3 +64,7 @@
   `dpl_22xUpP17vLRNvifZHejPVpwVw1mz`; `https://offertcg.vercel.app` now serves
   the rotating landing-card hero. Live `/` and `/api/cards/search?q=charizard`
   checks passed after deploy.
+- Added Tailwind CSS v3 with preflight disabled, shadcn-compatible
+  `components.json`, `lib/utils.ts`, and `/components/ui/aurora-background.tsx`.
+  The landing hero now uses the Aurora background behind the existing rotating
+  Pokemon card scene.

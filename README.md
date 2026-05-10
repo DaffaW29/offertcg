@@ -8,7 +8,8 @@ payout from a buy percentage.
 
 This repo currently contains a working MVP website with:
 
-- Modern landing screen with a rotating, animated Pokemon card visual library.
+- Modern landing screen with an Aurora background and a rotating, animated
+  Pokemon card visual library.
 - Search/add flow for Pokemon cards.
 - Live server-side Pokemon TCG API lookup with mock fallback.
 - Deal cart totals, quantity editing, per-card buy percentages, and global quick
@@ -25,6 +26,8 @@ This repo currently contains a working MVP website with:
 - Next.js App Router
 - React
 - TypeScript
+- Tailwind CSS for shadcn-style landing background utilities
+- shadcn-compatible `/components/ui` component structure
 - Server route handlers for price lookup
 - Supabase Auth and Postgres with RLS for account-scoped deal data
 - Browser `localStorage` fallback before sign-in

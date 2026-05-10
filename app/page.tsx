@@ -60,6 +60,7 @@ import {
   saveCloudLots,
   saveCloudSale
 } from "@/lib/supabase/deals";
+import { AuroraBackground } from "@/components/ui/aurora-background";
 
 const QUICK_PERCENTAGES = [70, 75, 80, 85, 90, 95, 100];
 const STORAGE_KEY = "offertcg-current-deal-v1";
@@ -1291,7 +1292,10 @@ export default function Home() {
 
   return (
     <>
-      <section className="landing-hero" aria-label="OfferTCG landing page">
+      <AuroraBackground
+        className="landing-hero dark"
+        aria-label="OfferTCG landing page"
+      >
         <div className="landing-card-scene" aria-hidden="true">
           {previousLandingCards ? (
             <div
@@ -1353,7 +1357,7 @@ export default function Home() {
             <span>Profit dashboard</span>
           </div>
         </div>
-      </section>
+      </AuroraBackground>
 
       <main className="app-shell" ref={workspaceRef}>
       <header className="app-header">
