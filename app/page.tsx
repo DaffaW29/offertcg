@@ -53,6 +53,7 @@ import {
 } from "@/lib/pricing/types";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
+  deleteCloudLot,
   loadCloudDealState,
   loadCloudLots,
   saveCloudDealState,
@@ -78,6 +79,7 @@ const percentFormatter = new Intl.NumberFormat("en-US", {
 type StoredDeal = {
   cart?: DealItem[];
   globalBuyPercent?: number;
+  pushNoMarketCardsDown?: boolean;
 };
 
 type ApiErrorResponse = {
@@ -328,6 +330,7 @@ export default function Home() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [globalBuyPercent, setGlobalBuyPercent] =
     useState(DEFAULT_BUY_PERCENT);
+  const [pushNoMarketCardsDown, setPushNoMarketCardsDown] = useState(true);
   const [hasHydrated, setHasHydrated] = useState(false);
   const workspaceRef = useRef<HTMLElement>(null);
   const resultListRef = useRef<HTMLDivElement>(null);
@@ -437,6 +440,9 @@ export default function Home() {
       if (isValidPercent(storedDeal.globalBuyPercent)) {
         setGlobalBuyPercent(storedDeal.globalBuyPercent);
       }
+      if (typeof storedDeal.pushNoMarketCardsDown === "boolean") {
+        setPushNoMarketCardsDown(storedDeal.pushNoMarketCardsDown);
+      }
       setHasHydrated(true);
     });
 
@@ -450,9 +456,21 @@ export default function Home() {
 
     window.localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ cart, globalBuyPercent })
+      JSON.stringify({ cart, globalBuyPercent, pushNoMarketCardsDown })
     );
-  }, [cart, globalBuyPercent, hasHydrated, session]);
+  }, [cart, globalBuyPercent, hasHydrated, pushNoMarketCardsDown, session]);
+
+  useEffect(() => {
+    if (!hasHydrated || !session) {
+      return;
+    }
+
+    const storedDeal = readStoredDeal();
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ ...storedDeal, pushNoMarketCardsDown })
+    );
+  }, [hasCloudDataLoaded, hasHydrated, pushNoMarketCardsDown, session]);
 
   useEffect(() => {
     if (!hasHydrated || session) {
@@ -864,6 +882,9 @@ export default function Home() {
         }
       });
   }, [inventoryMode, inventoryQuery, inventorySort, recentBuys]);
+  const displayedResults = useMemo(() => {
+    return pushNoMarketCardsDown ? sortCardsByMarketAvailability(results) : results;
+  }, [pushNoMarketCardsDown, results]);
   const totalPages = Math.max(
     DEFAULT_SEARCH_PAGE,
     Math.ceil(pagination.totalCount / pagination.pageSize)
@@ -1215,6 +1236,53 @@ export default function Home() {
         );
       });
     }
+  }
+
+  async function deleteLot(lotId: string) {
+    const lot = recentBuys.find((currentLot) => currentLot.id === lotId);
+    if (!lot) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete ${lot.label}?\n\nThis permanently removes the lot, its cards, sale records, inventory rows, and analytics history.`
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    if (supabaseClient && session && hasCloudDataLoaded) {
+      try {
+        await deleteCloudLot(supabaseClient, session.user.id, lotId);
+        setCloudMessage("Deleted lot.");
+      } catch (error) {
+        setCloudMessage(
+          error instanceof Error
+            ? `Unable to delete lot: ${error.message}`
+            : "Unable to delete lot."
+        );
+        return;
+      }
+    }
+
+    const remainingLots = recentBuys.filter(
+      (currentLot) => currentLot.id !== lotId
+    );
+
+    setRecentBuys(remainingLots);
+    setSelectedLotId((currentLotId) =>
+      currentLotId === lotId ? remainingLots[0]?.id ?? null : currentLotId
+    );
+    setSaleDrafts((current) => {
+      const next = { ...current };
+      const lotDraftPrefix = `${lotId}|`;
+      Object.keys(next).forEach((key) => {
+        if (key.startsWith(lotDraftPrefix)) {
+          delete next[key];
+        }
+      });
+      return next;
+    });
   }
 
   function viewLot(lotId: string) {
@@ -1592,6 +1660,19 @@ export default function Home() {
           </button>
         </form>
 
+        <div className="search-options" aria-label="Search result options">
+          <label className="toggle-option">
+            <input
+              type="checkbox"
+              checked={pushNoMarketCardsDown}
+              onChange={(event) =>
+                setPushNoMarketCardsDown(event.target.checked)
+              }
+            />
+            <span>Push no-market cards down</span>
+          </label>
+        </div>
+
         {searchError ? <p className="status-message error">{searchError}</p> : null}
         {providerNotice ? (
           <p className="status-message warning">{providerNotice}</p>
@@ -1630,7 +1711,7 @@ export default function Home() {
           ) : null}
 
           <div className="result-list" ref={resultListRef}>
-            {results.map((card) => {
+            {displayedResults.map((card) => {
               const selectedVariant = getSelectedVariant(
                 card,
                 selectedVariants[card.id]
@@ -1690,7 +1771,7 @@ export default function Home() {
                       </button>
                     </div>
                     <div className="result-meta">
-                      <span>Updated {formatDate(card.lastUpdated)}</span>
+                      <span>{formatPriceDate(card.lastUpdated)}</span>
                       {card.externalUrl ? (
                         <a href={card.externalUrl} target="_blank" rel="noreferrer">
                           View source
@@ -2090,13 +2171,23 @@ export default function Home() {
               {historySelectedLot && historySelectedLotTotals ? (
                 <section className="panel lot-detail-panel">
                   <div className="panel-heading lot-detail-heading">
-                    <div>
-                      <p className="eyebrow">Lot detail</p>
-                      <h2>{historySelectedLot.label}</h2>
-                      <p className="muted">
-                        Checked out{" "}
-                        {formatDateTime(historySelectedLot.checkedOutAt)}
-                      </p>
+                    <div className="lot-detail-title">
+                      <div>
+                        <p className="eyebrow">Lot detail</p>
+                        <h2>{historySelectedLot.label}</h2>
+                        <p className="muted">
+                          Checked out{" "}
+                          {formatDateTime(historySelectedLot.checkedOutAt)}
+                        </p>
+                      </div>
+                      <button
+                        className="ghost-button danger"
+                        type="button"
+                        onClick={() => void deleteLot(historySelectedLot.id)}
+                      >
+                        <Trash2 size={17} />
+                        Delete lot
+                      </button>
                     </div>
                     <div className="lot-metrics" aria-label="Selected lot totals">
                       <SummaryMetric
@@ -2693,6 +2784,23 @@ function getSelectedVariant(card: CardSearchResult, selectedId?: string) {
   );
 }
 
+function sortCardsByMarketAvailability(cards: CardSearchResult[]) {
+  return cards
+    .map((card, index) => ({ card, index }))
+    .sort((left, right) => {
+      const priceRank =
+        Number(hasCardMarketPrice(right.card)) -
+        Number(hasCardMarketPrice(left.card));
+
+      return priceRank === 0 ? left.index - right.index : priceRank;
+    })
+    .map(({ card }) => card);
+}
+
+function hasCardMarketPrice(card: CardSearchResult) {
+  return card.variants.some((variant) => variant.marketPrice !== null);
+}
+
 function saleDraftKey(lotId: string, itemId: string) {
   return `${lotId}|${itemId}`;
 }
@@ -2741,6 +2849,14 @@ function formatDate(value: string) {
     day: "numeric",
     year: "numeric"
   });
+}
+
+function formatPriceDate(value: string) {
+  if (!value.trim()) {
+    return "Price date unavailable";
+  }
+
+  return `Updated ${formatDate(value)}`;
 }
 
 function formatDateTime(value: string) {

@@ -236,7 +236,7 @@ function humanizePriceKey(key: string) {
 
 function normalizeDate(value?: string) {
   if (!value) {
-    return new Date().toISOString();
+    return "";
   }
 
   const parsed = new Date(value.replace(/\//g, "-"));

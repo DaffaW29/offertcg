@@ -36,6 +36,8 @@ This repo currently contains a working MVP website with:
 
 - Paginated Pokemon card search by name with optional set name, card number, and
   rarity filters.
+- Search results can push no-market cards below priced cards and label missing
+  provider update dates as unavailable.
 - Server-side price provider abstraction so API keys stay out of client code.
 - Default live provider uses the Pokemon TCG API.
 - Mock provider fallback when live price lookup is unavailable.
@@ -43,7 +45,8 @@ This repo currently contains a working MVP website with:
   total payout, notes, condition, manual price override, remove, clear cart, and
   CSV export.
 - Checkout flow that stores recent buy lots.
-- Recent buys view with partial sold-quantity tracking and gross profit by lot.
+- Recent buys view with partial sold-quantity tracking, gross profit by lot,
+  and confirmed lot deletion.
 - Recent buy history search, status filters, sort controls, and lot badges.
 - Portfolio analytics dashboard with realized profit, ROI, sell-through, lot
   performance, and monthly profit bars.
@@ -112,6 +115,9 @@ Signed-in users store data in four RLS-protected tables:
 2. `deal_lots`: checked-out buy lots.
 3. `deal_lot_items`: card snapshots inside each lot.
 4. `sale_records`: partial sold entries for lot items.
+
+Deleting a lot removes its `deal_lots` row and cascades to the lot items and
+sale records through the schema relationships.
 
 Existing local cart/recent buy data is imported once after first sign-in, then
 cleared from local storage.

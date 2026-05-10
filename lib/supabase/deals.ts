@@ -157,6 +157,22 @@ export async function saveCloudLots(
   }
 }
 
+export async function deleteCloudLot(
+  supabase: Supabase,
+  userId: string,
+  lotId: string
+) {
+  const { error } = await supabase
+    .from("deal_lots")
+    .delete()
+    .eq("id", lotId)
+    .eq("user_id", userId);
+
+  if (error) {
+    throw error;
+  }
+}
+
 export async function saveCloudSale(
   supabase: Supabase,
   userId: string,

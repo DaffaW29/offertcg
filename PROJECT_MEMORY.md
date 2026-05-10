@@ -68,3 +68,13 @@
   `components.json`, `lib/utils.ts`, and `/components/ui/aurora-background.tsx`.
   The landing hero now uses the Aurora background behind the existing rotating
   Pokemon card scene.
+- Added confirmed hard-delete for recent buy lots. Signed-in deletes remove the
+  `deal_lots` row and rely on the existing Supabase cascade constraints for lot
+  items and sale records; unsigned deletes update local recent-buy state.
+- Japanese search support is intentionally deferred. The current search path
+  uses Pokemon TCG API card data plus TCGplayer pricing, while no-cost
+  multilingual catalog sources would need manual/unavailable pricing handling.
+- Fixed Pokemon TCG search mapping so missing `tcgplayer.updatedAt` stays blank
+  instead of showing today. Users can toggle whether search pages push cards
+  with market prices above unpriced cards, and that browser preference is stored
+  locally instead of synced to Supabase.
