@@ -55,3 +55,8 @@
 - Live verification passed for `/` and `/api/cards/search?q=charizard`. Supabase
   Auth URL Configuration still needs the production Site URL and redirect URLs
   set in the Supabase dashboard.
+- Added a modern first-screen landing hero above the existing workspace with
+  floating animated Pokemon card images, CTA buttons that scroll into the app,
+  and reduced-motion handling. No route or persistence changes were needed.
+- Expanded the landing hero card library to 16 verified Pokemon TCG image URLs
+  and added timed cross-fades so each visual slot cycles through new cards.

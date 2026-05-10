@@ -8,6 +8,7 @@ payout from a buy percentage.
 
 This repo currently contains a working MVP website with:
 
+- Modern landing screen with a rotating, animated Pokemon card visual library.
 - Search/add flow for Pokemon cards.
 - Live server-side Pokemon TCG API lookup with mock fallback.
 - Deal cart totals, quantity editing, per-card buy percentages, and global quick

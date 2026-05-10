@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import {
+  ArrowRight,
   BarChart3,
   Boxes,
   ChevronLeft,
@@ -17,6 +18,7 @@ import {
   RotateCcw,
   Search,
   ShoppingCart,
+  Sparkles,
   Trash2,
   X
 } from "lucide-react";
@@ -170,6 +172,105 @@ const LOT_HISTORY_SORT_OPTIONS: {
   { label: "Buy cost", value: "buy-cost" }
 ];
 
+const LANDING_CARDS = [
+  {
+    id: "sv3-125",
+    name: "Charizard ex",
+    meta: "Obsidian Flames",
+    imageUrl: "https://images.pokemontcg.io/sv3/125.png"
+  },
+  {
+    id: "sv3pt5-25",
+    name: "Pikachu",
+    meta: "Scarlet & Violet 151",
+    imageUrl: "https://images.pokemontcg.io/sv3pt5/25.png"
+  },
+  {
+    id: "swsh7-215",
+    name: "Umbreon VMAX",
+    meta: "Evolving Skies",
+    imageUrl: "https://images.pokemontcg.io/swsh7/215.png"
+  },
+  {
+    id: "sv4-248",
+    name: "Iron Hands ex",
+    meta: "Paradox Rift",
+    imageUrl: "https://images.pokemontcg.io/sv4/248.png"
+  },
+  {
+    id: "swsh8-271",
+    name: "Gengar VMAX",
+    meta: "Fusion Strike",
+    imageUrl: "https://images.pokemontcg.io/swsh8/271.png"
+  },
+  {
+    id: "swsh12-186",
+    name: "Lugia V",
+    meta: "Silver Tempest",
+    imageUrl: "https://images.pokemontcg.io/swsh12/186.png"
+  },
+  {
+    id: "swsh11-186",
+    name: "Giratina V",
+    meta: "Lost Origin",
+    imageUrl: "https://images.pokemontcg.io/swsh11/186.png"
+  },
+  {
+    id: "swsh7-218",
+    name: "Rayquaza VMAX",
+    meta: "Evolving Skies",
+    imageUrl: "https://images.pokemontcg.io/swsh7/218.png"
+  },
+  {
+    id: "sv3pt5-199",
+    name: "Charizard ex",
+    meta: "Pokemon 151",
+    imageUrl: "https://images.pokemontcg.io/sv3pt5/199.png"
+  },
+  {
+    id: "sv3pt5-200",
+    name: "Blastoise ex",
+    meta: "Pokemon 151",
+    imageUrl: "https://images.pokemontcg.io/sv3pt5/200.png"
+  },
+  {
+    id: "sv3pt5-198",
+    name: "Venusaur ex",
+    meta: "Pokemon 151",
+    imageUrl: "https://images.pokemontcg.io/sv3pt5/198.png"
+  },
+  {
+    id: "sv2-203",
+    name: "Magikarp",
+    meta: "Paldea Evolved",
+    imageUrl: "https://images.pokemontcg.io/sv2/203.png"
+  },
+  {
+    id: "sv6-214",
+    name: "Greninja ex",
+    meta: "Twilight Masquerade",
+    imageUrl: "https://images.pokemontcg.io/sv6/214.png"
+  },
+  {
+    id: "base1-4",
+    name: "Charizard",
+    meta: "Base Set",
+    imageUrl: "https://images.pokemontcg.io/base1/4.png"
+  },
+  {
+    id: "base1-2",
+    name: "Blastoise",
+    meta: "Base Set",
+    imageUrl: "https://images.pokemontcg.io/base1/2.png"
+  },
+  {
+    id: "base1-15",
+    name: "Venusaur",
+    meta: "Base Set",
+    imageUrl: "https://images.pokemontcg.io/base1/15.png"
+  }
+] as const;
+
 const EMPTY_SEARCH_PAGINATION: SearchPagination = {
   page: DEFAULT_SEARCH_PAGE,
   pageSize: SEARCH_PAGE_SIZE,
@@ -179,6 +280,10 @@ const EMPTY_SEARCH_PAGINATION: SearchPagination = {
 
 export default function Home() {
   const supabaseClient = useMemo(() => getSupabaseBrowserClient(), []);
+  const [visibleLandingOffset, setVisibleLandingOffset] = useState(0);
+  const [previousLandingOffset, setPreviousLandingOffset] = useState<
+    number | null
+  >(null);
   const [session, setSession] = useState<Session | null>(null);
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
@@ -223,8 +328,40 @@ export default function Home() {
   const [globalBuyPercent, setGlobalBuyPercent] =
     useState(DEFAULT_BUY_PERCENT);
   const [hasHydrated, setHasHydrated] = useState(false);
+  const workspaceRef = useRef<HTMLElement>(null);
   const resultListRef = useRef<HTMLDivElement>(null);
   const profilePopoverRef = useRef<HTMLDivElement>(null);
+  const landingOffsetRef = useRef(0);
+  const landingTransitionTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    );
+
+    if (prefersReducedMotion.matches) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      const current = landingOffsetRef.current;
+      const next = (current + 4) % LANDING_CARDS.length;
+
+      landingOffsetRef.current = next;
+      setPreviousLandingOffset(current);
+      setVisibleLandingOffset(next);
+
+      window.clearTimeout(landingTransitionTimeoutRef.current ?? undefined);
+      landingTransitionTimeoutRef.current = window.setTimeout(() => {
+        setPreviousLandingOffset(null);
+      }, 900);
+    }, 4800);
+
+    return () => {
+      window.clearInterval(interval);
+      window.clearTimeout(landingTransitionTimeoutRef.current ?? undefined);
+    };
+  }, []);
 
   useEffect(() => {
     if (!supabaseClient) {
@@ -496,6 +633,15 @@ export default function Home() {
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isProfileOpen]);
+
+  const visibleLandingCards = useMemo(() => {
+    return landingCardsForOffset(visibleLandingOffset);
+  }, [visibleLandingOffset]);
+  const previousLandingCards = useMemo(() => {
+    return previousLandingOffset === null
+      ? null
+      : landingCardsForOffset(previousLandingOffset);
+  }, [previousLandingOffset]);
 
   const totals = useMemo(() => {
     return cart.reduce(
@@ -1077,6 +1223,21 @@ export default function Home() {
     setActiveTab("recent");
   }
 
+  function scrollToWorkspace(tab?: ActiveTab) {
+    if (tab) {
+      setActiveTab(tab);
+    }
+
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+
+    workspaceRef.current?.scrollIntoView({
+      behavior: prefersReducedMotion ? "auto" : "smooth",
+      block: "start"
+    });
+  }
+
   function exportCsv() {
     if (cart.length === 0) {
       return;
@@ -1129,7 +1290,72 @@ export default function Home() {
   }
 
   return (
-    <main className="app-shell">
+    <>
+      <section className="landing-hero" aria-label="OfferTCG landing page">
+        <div className="landing-card-scene" aria-hidden="true">
+          {previousLandingCards ? (
+            <div
+              className="landing-card-layer exiting"
+              key={`previous-${previousLandingOffset}`}
+            >
+              {previousLandingCards.map((card, index) => (
+                <LandingCard card={card} index={index} key={card.id} />
+              ))}
+            </div>
+          ) : null}
+
+          <div
+            className="landing-card-layer entering"
+            key={`current-${visibleLandingOffset}`}
+          >
+            {visibleLandingCards.map((card, index) => (
+              <LandingCard
+                card={card}
+                index={index}
+                key={card.id}
+                priority={visibleLandingOffset === 0 && index < 2}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="landing-content">
+          <p className="landing-eyebrow">
+            <Sparkles size={17} />
+            Pokemon vendor deal desk
+          </p>
+          <h1>OfferTCG</h1>
+          <p>
+            Price card lots, check out buys, track inventory, and measure profit
+            from one focused trading card workflow.
+          </p>
+          <div className="landing-actions">
+            <button
+              className="landing-primary"
+              type="button"
+              onClick={() => scrollToWorkspace("current")}
+            >
+              Launch app
+              <ArrowRight size={18} />
+            </button>
+            <button
+              className="landing-secondary"
+              type="button"
+              onClick={() => scrollToWorkspace("analytics")}
+            >
+              View analytics
+              <BarChart3 size={18} />
+            </button>
+          </div>
+          <div className="landing-proof" aria-label="Product highlights">
+            <span>Live price search</span>
+            <span>Supabase sync</span>
+            <span>Profit dashboard</span>
+          </div>
+        </div>
+      </section>
+
+      <main className="app-shell" ref={workspaceRef}>
       <header className="app-header">
         <div>
           <p className="eyebrow">Vendor buy tool</p>
@@ -2249,7 +2475,40 @@ export default function Home() {
           </section>
         </section>
       )}
-    </main>
+      </main>
+    </>
+  );
+}
+
+function landingCardsForOffset(offset: number) {
+  return Array.from({ length: 4 }, (_unused, index) => {
+    return LANDING_CARDS[(offset + index) % LANDING_CARDS.length];
+  });
+}
+
+function LandingCard({
+  card,
+  index,
+  priority = false
+}: {
+  card: (typeof LANDING_CARDS)[number];
+  index: number;
+  priority?: boolean;
+}) {
+  return (
+    <div className={`floating-card card-${index + 1}`}>
+      <Image
+        src={card.imageUrl}
+        alt=""
+        width={220}
+        height={307}
+        priority={priority}
+      />
+      <span>
+        {card.name}
+        <small>{card.meta}</small>
+      </span>
+    </div>
   );
 }
 
