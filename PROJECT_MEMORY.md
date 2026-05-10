@@ -60,3 +60,7 @@
   and reduced-motion handling. No route or persistence changes were needed.
 - Expanded the landing hero card library to 16 verified Pokemon TCG image URLs
   and added timed cross-fades so each visual slot cycles through new cards.
+- Manually redeployed commit `26be898` to Vercel production as
+  `dpl_22xUpP17vLRNvifZHejPVpwVw1mz`; `https://offertcg.vercel.app` now serves
+  the rotating landing-card hero. Live `/` and `/api/cards/search?q=charizard`
+  checks passed after deploy.
