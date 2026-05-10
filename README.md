@@ -21,6 +21,18 @@ This repo currently contains a working MVP website with:
   sign-in.
 - Compact profile menu for account sync controls.
 
+## Screenshots
+
+![OfferTCG landing screen with floating Pokemon card visuals](docs/screenshots/landing-hero.png)
+
+| Deal builder | Recent buys |
+| --- | --- |
+| ![Live card search, no-market sorting, and deal cart payout controls](docs/screenshots/deal-builder.png) | ![Recent buy lot history with sale tracking, lot profit, and delete controls](docs/screenshots/recent-buys.png) |
+
+| Analytics dashboard | Inventory view |
+| --- | --- |
+| ![Portfolio analytics dashboard with ROI, sell-through, monthly profit, and lot performance](docs/screenshots/analytics-dashboard.png) | ![Inventory table with remaining cards, market value, spread, and lot navigation](docs/screenshots/inventory-view.png) |
+
 ## Stack
 
 - Next.js App Router

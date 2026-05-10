@@ -78,3 +78,6 @@
   instead of showing today. Users can toggle whether search pages push cards
   with market prices above unpriced cards, and that browser preference is stored
   locally instead of synced to Supabase.
+- Added README screenshot gallery assets under `docs/screenshots/` covering the
+  landing hero, deal builder, recent buys, analytics dashboard, and inventory
+  view.
