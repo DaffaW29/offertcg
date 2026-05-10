@@ -43,3 +43,15 @@
   filters, sorting, and lot status badges. Account controls now live in a
   profile popover opened from the header icon instead of a persistent header
   panel.
+
+## 2026-05-10
+
+- Deployed production to Vercel at `https://offertcg.vercel.app` with project
+  `daffa-w-s-projects/offertcg`. Production env vars added: Supabase URL,
+  Supabase publishable key, and `PRICE_PROVIDER=pokemon-tcg`.
+- Vercel CLI created local `.vercel` project metadata and added `.vercel` to
+  `.gitignore`. GitHub auto-deploy connection failed until the Vercel account
+  adds a GitHub login connection.
+- Live verification passed for `/` and `/api/cards/search?q=charizard`. Supabase
+  Auth URL Configuration still needs the production Site URL and redirect URLs
+  set in the Supabase dashboard.

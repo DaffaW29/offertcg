@@ -112,6 +112,32 @@ Signed-in users store data in four RLS-protected tables:
 Existing local cart/recent buy data is imported once after first sign-in, then
 cleared from local storage.
 
+## Deployment
+
+Production is deployed on Vercel:
+
+```text
+https://offertcg.vercel.app
+```
+
+Required Vercel environment variables:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+PRICE_PROVIDER=pokemon-tcg
+```
+
+Optional:
+
+```bash
+POKEMON_TCG_API_KEY
+```
+
+After deployment, configure Supabase Authentication URL settings with the
+production Site URL and allowed redirect URLs for the Vercel domain and
+localhost development.
+
 ## Commands
 
 ```bash
