@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
+import { requireAuthWithRateLimit } from "@/lib/api/auth";
 import type { CityLocation } from "@/lib/portfolio/types";
 
 export const dynamic = "force-dynamic";
@@ -6,6 +8,10 @@ export const dynamic = "force-dynamic";
 const MAPBOX_GEOCODING_URL =
   "https://api.mapbox.com/search/geocode/v6/forward";
 const REQUEST_TIMEOUT_MS = 8000;
+
+const searchSchema = z.object({
+  q: z.string().min(2, "Enter at least 2 characters to search cities.").max(80, "City search is too long. Keep it under 80 characters.")
+});
 
 const fallbackCities: CityLocation[] = [
   {
@@ -71,22 +77,20 @@ type MapboxResponse = {
 };
 
 export async function GET(request: Request) {
+  const auth = await requireAuthWithRateLimit("city-search");
+  if (!auth.authenticated) return auth.response;
+
   const { searchParams } = new URL(request.url);
-  const query = searchParams.get("q")?.trim() ?? "";
+  const parsed = searchSchema.safeParse({
+    q: searchParams.get("q")?.trim()
+  });
 
-  if (query.length < 2) {
-    return NextResponse.json(
-      { error: "Enter at least 2 characters to search cities." },
-      { status: 400 }
-    );
+  if (!parsed.success) {
+    const message = parsed.error.issues[0]?.message ?? "Invalid search parameters.";
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 
-  if (query.length > 80) {
-    return NextResponse.json(
-      { error: "City search is too long. Keep it under 80 characters." },
-      { status: 400 }
-    );
-  }
+  const query = parsed.data.q;
 
   const token =
     process.env.MAPBOX_TOKEN?.trim() ??

@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
+import { requireAuthWithRateLimit } from "@/lib/api/auth";
 import {
   buildFallbackPriceResearch,
-  summarizePriceResearch,
-  type PortfolioPriceResearchRequest
+  summarizePriceResearch
 } from "@/lib/portfolio/pricing";
 import type {
   PortfolioPriceSource,
@@ -14,6 +15,34 @@ export const dynamic = "force-dynamic";
 
 const POKETRACE_API_BASE = "https://api.poketrace.com/v1";
 const REQUEST_TIMEOUT_MS = 10000;
+
+const priceResearchSchema = z
+  .object({
+    name: z.string().min(1).max(200),
+    providerCardId: z.string().min(1).max(100),
+    setName: z.string().min(1).max(200),
+    cardNumber: z.string().min(1).max(30),
+    variantLabel: z.string().max(200).default(""),
+    ownershipType: z.enum(["raw", "graded"]),
+    condition: z.string().max(50).optional(),
+    grader: z.enum(["PSA", "BGS", "CGC", "SGC", "ACE", "TAG"]).optional(),
+    grade: z.string().max(20).optional(),
+    fallbackMarketPrice: z.number().finite().nonnegative().optional()
+  })
+  .refine(
+    (data) => {
+      if (data.ownershipType === "graded") {
+        return !!data.grader && !!data.grade?.trim();
+      }
+      return !!data.condition?.trim();
+    },
+    {
+      message:
+        "Graded cards need a grading company and grade. Raw cards need a condition."
+    }
+  );
+
+type ValidatedPayload = z.infer<typeof priceResearchSchema>;
 
 type PokeTraceCard = {
   id?: string;
@@ -61,18 +90,23 @@ type PokeTraceHistoryResponse = {
 };
 
 export async function POST(request: Request) {
-  let payload: PortfolioPriceResearchRequest;
+  const auth = await requireAuthWithRateLimit("price-research");
+  if (!auth.authenticated) return auth.response;
 
+  let rawBody: unknown;
   try {
-    payload = (await request.json()) as PortfolioPriceResearchRequest;
+    rawBody = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const validationError = validateRequest(payload);
-  if (validationError) {
-    return NextResponse.json({ error: validationError }, { status: 400 });
+  const parsed = priceResearchSchema.safeParse(rawBody);
+  if (!parsed.success) {
+    const message = parsed.error.issues[0]?.message ?? "Invalid request body.";
+    return NextResponse.json({ error: message }, { status: 400 });
   }
+
+  const payload = parsed.data;
 
   const apiKey = process.env.POKETRACE_API_KEY?.trim();
   if (!apiKey) {
@@ -118,24 +152,8 @@ export async function POST(request: Request) {
   }
 }
 
-function validateRequest(payload: PortfolioPriceResearchRequest) {
-  if (!payload.name?.trim() || !payload.providerCardId?.trim()) {
-    return "Card name and provider card ID are required.";
-  }
-
-  if (payload.ownershipType === "graded") {
-    if (!payload.grader || !payload.grade?.trim()) {
-      return "Graded cards need a grading company and grade.";
-    }
-  } else if (!payload.condition?.trim()) {
-    return "Raw cards need a condition.";
-  }
-
-  return "";
-}
-
 async function findPokeTraceCard(
-  request: PortfolioPriceResearchRequest,
+  request: ValidatedPayload,
   apiKey: string,
   signal: AbortSignal
 ) {
@@ -155,8 +173,8 @@ async function findPokeTraceCard(
     throw new Error(`PokeTrace returned ${response.status}.`);
   }
 
-  const payload = (await response.json()) as PokeTraceSearchResponse;
-  const cards = payload.data ?? [];
+  const data = (await response.json()) as PokeTraceSearchResponse;
+  const cards = data.data ?? [];
   const normalizedSet = request.setName.trim().toLowerCase();
   const normalizedNumber = request.cardNumber.trim().toLowerCase();
 
@@ -171,7 +189,7 @@ async function findPokeTraceCard(
 
 async function fetchPokeTraceListings(
   cardId: string,
-  request: PortfolioPriceResearchRequest,
+  request: ValidatedPayload,
   apiKey: string,
   signal: AbortSignal
 ): Promise<PortfolioTransaction[]> {
@@ -196,8 +214,8 @@ async function fetchPokeTraceListings(
     throw new Error(`PokeTrace listings returned ${response.status}.`);
   }
 
-  const payload = (await response.json()) as PokeTraceListingsResponse;
-  return (payload.data ?? []).flatMap((listing) => {
+  const data = (await response.json()) as PokeTraceListingsResponse;
+  return (data.data ?? []).flatMap((listing) => {
     if (!listing.price || !listing.soldAt) {
       return [];
     }
@@ -225,7 +243,9 @@ async function fetchPokeTraceHistory(
   apiKey: string,
   signal: AbortSignal
 ): Promise<PortfolioPriceSource[]> {
-  const url = new URL(`${POKETRACE_API_BASE}/cards/${cardId}/prices/${tier}/history`);
+  const url = new URL(
+    `${POKETRACE_API_BASE}/cards/${cardId}/prices/${tier}/history`
+  );
   url.searchParams.set("period", "30d");
   url.searchParams.set("limit", "5");
 
@@ -241,8 +261,8 @@ async function fetchPokeTraceHistory(
     throw new Error(`PokeTrace history returned ${response.status}.`);
   }
 
-  const payload = (await response.json()) as PokeTraceHistoryResponse;
-  return (payload.data ?? []).flatMap((row) => {
+  const data = (await response.json()) as PokeTraceHistoryResponse;
+  return (data.data ?? []).flatMap((row) => {
     if (!row.source || typeof row.avg !== "number") {
       return [];
     }
@@ -308,7 +328,7 @@ function buildSources(
   return sources;
 }
 
-function researchTier(request: PortfolioPriceResearchRequest) {
+function researchTier(request: ValidatedPayload) {
   if (request.ownershipType === "graded") {
     return `${normalizeTierPart(request.grader ?? "GRADED")}_${normalizeTierPart(
       request.grade ?? "UNKNOWN"

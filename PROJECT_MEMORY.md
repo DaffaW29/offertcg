@@ -126,3 +126,11 @@
 - Verification targets now include `npm run lint`, `npm run build`, and
   `node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test
   --experimental-strip-types lib/portfolio/portfolio.test.mts`.
+- API routes for card search, city search, and price research now require
+  server-side Supabase auth before provider work, validate inputs with Zod, and
+  call an Upstash-backed per-user route limiter when
+  `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` are configured.
+- The server auth helper intentionally treats missing Supabase env vars as
+  unauthenticated so local-only mode returns 401 instead of throwing 500s.
+- Next 16 uses the `proxy.ts` convention for Supabase auth cookie refresh on
+  `/api/*` and `/workspace/*`; avoid reintroducing deprecated `middleware.ts`.

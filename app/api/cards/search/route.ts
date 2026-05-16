@@ -1,42 +1,46 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
+import { requireAuthWithRateLimit } from "@/lib/api/auth";
 import { searchCardsWithFallback } from "@/lib/pricing";
-import {
-  DEFAULT_SEARCH_PAGE,
-  SEARCH_PAGE_SIZE
-} from "@/lib/pricing/types";
+import { DEFAULT_SEARCH_PAGE, SEARCH_PAGE_SIZE } from "@/lib/pricing/types";
 
 export const dynamic = "force-dynamic";
 
+const searchSchema = z.object({
+  q: z.string().min(2, "Enter at least 2 characters to search.").max(80, "Search is too long. Keep it under 80 characters."),
+  set: z.string().max(120).optional(),
+  number: z.string().max(20).optional(),
+  rarity: z.string().max(40).optional(),
+  page: z.coerce.number().int().min(1).optional()
+});
+
 export async function GET(request: Request) {
+  const auth = await requireAuthWithRateLimit("cards-search");
+  if (!auth.authenticated) return auth.response;
+
   const { searchParams } = new URL(request.url);
-  const query = searchParams.get("q")?.trim() ?? "";
+  const parsed = searchSchema.safeParse({
+    q: searchParams.get("q")?.trim(),
+    set: searchParams.get("set")?.trim() || undefined,
+    number: searchParams.get("number")?.trim() || undefined,
+    rarity: searchParams.get("rarity")?.trim() || undefined,
+    page: searchParams.get("page") || undefined
+  });
 
-  if (query.length < 2) {
-    return NextResponse.json(
-      { error: "Enter at least 2 characters to search." },
-      { status: 400 }
-    );
+  if (!parsed.success) {
+    const message = parsed.error.issues[0]?.message ?? "Invalid search parameters.";
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 
-  if (query.length > 80) {
-    return NextResponse.json(
-      { error: "Search is too long. Keep it under 80 characters." },
-      { status: 400 }
-    );
-  }
-
-  const setName = cleanOptional(searchParams.get("set"));
-  const cardNumber = cleanOptional(searchParams.get("number"));
-  const rarity = cleanOptional(searchParams.get("rarity"));
-  const page = parsePage(searchParams.get("page"));
+  const { q, set, number, rarity, page } = parsed.data;
 
   try {
     const result = await searchCardsWithFallback({
-      query,
-      setName,
-      cardNumber,
+      query: q,
+      setName: set,
+      cardNumber: number,
       rarity,
-      page,
+      page: page ?? DEFAULT_SEARCH_PAGE,
       pageSize: SEARCH_PAGE_SIZE
     });
 
@@ -52,19 +56,4 @@ export async function GET(request: Request) {
       { status: 500 }
     );
   }
-}
-
-function cleanOptional(value: string | null) {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : undefined;
-}
-
-function parsePage(value: string | null) {
-  const page = Number(value);
-
-  if (!Number.isFinite(page)) {
-    return DEFAULT_SEARCH_PAGE;
-  }
-
-  return Math.max(DEFAULT_SEARCH_PAGE, Math.floor(page));
 }
