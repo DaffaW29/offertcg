@@ -1,54 +1,28 @@
 "use client";
 
-import Image from "next/image";
-import {
-  ArrowRight,
-  BarChart3,
-  Boxes,
-  ChevronLeft,
-  ChevronRight,
-  CheckCircle,
-  CircleUserRound,
-  Download,
-  History,
-  LogIn,
-  LogOut,
-  Loader2,
-  Pencil,
-  Plus,
-  RotateCcw,
-  Search,
-  ShoppingCart,
-  Sparkles,
-  Trash2,
-  X
-} from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
-  CONDITIONS,
-  type CardCondition,
-  type DealLot,
-  type DealLotItem,
-  type DealItem,
   effectiveMarketPrice,
-  grossProfit,
-  lotNetProfit,
   lotTotals,
-  portfolioTotals,
-  remainingCost,
-  remainingMarketValue,
-  remainingQuantity,
-  remainingSpread,
   roundCurrency,
-  roiPercent,
   suggestedBuyPrice,
-  soldRevenue,
-  totalPayout
+  totalPayout,
+  type CardCondition,
+  type DealItem,
+  type DealLot
 } from "@/lib/deals";
+import type {
+  CityLocation,
+  PortfolioItem,
+  PortfolioOwnershipType,
+  PortfolioPriceSource,
+  PublicPortfolioPin
+} from "@/lib/portfolio/types";
+import { estimatePortfolioWorth } from "@/lib/portfolio/valuation";
+import type { PortfolioPriceResearchResponse } from "@/lib/portfolio/pricing";
 import {
   DEFAULT_SEARCH_PAGE,
-  SEARCH_PAGE_SIZE,
   type CardSearchResult,
   type ProviderSearchResponse
 } from "@/lib/pricing/types";
@@ -63,226 +37,88 @@ import {
   saveCloudLots,
   saveCloudSale
 } from "@/lib/supabase/deals";
-import { AuroraBackground } from "@/components/ui/aurora-background";
-
-const QUICK_PERCENTAGES = [70, 75, 80, 85, 90, 95, 100];
-const STORAGE_KEY = "offertcg-current-deal-v1";
-const RECENT_BUYS_STORAGE_KEY = "offertcg-recent-buys-v1";
-const DEFAULT_BUY_PERCENT = QUICK_PERCENTAGES[0];
-const MAX_LOT_LABEL_LENGTH = 80;
-
-const currencyFormatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD"
-});
-const percentFormatter = new Intl.NumberFormat("en-US", {
-  maximumFractionDigits: 1
-});
-
-type StoredDeal = {
-  cart?: DealItem[];
-  globalBuyPercent?: number;
-  pushNoMarketCardsDown?: boolean;
-};
-
-type ApiErrorResponse = {
-  error?: string;
-};
-
-type ActiveTab = "current" | "recent" | "analytics" | "inventory";
-type InventoryMode = "unsold" | "all";
-type InventorySort = "newest" | "value" | "cost" | "name" | "spread";
-type LotHistoryFilter = "all" | "open" | "sold" | "profitable" | "loss";
-type LotHistorySort =
-  | "newest"
-  | "oldest"
-  | "profit"
-  | "roi"
-  | "remaining"
-  | "buy-cost";
-
-type SearchFilters = {
-  query: string;
-  setName: string;
-  cardNumber: string;
-  rarity: string;
-};
-
-type SearchPagination = {
-  page: number;
-  pageSize: number;
-  count: number;
-  totalCount: number;
-};
-
-type SaleDraft = {
-  quantity: string;
-  saleTotal: string;
-};
-
-type AuthMode = "login" | "signup";
-
-type LotPerformance = {
-  lot: DealLot;
-  totals: ReturnType<typeof lotTotals>;
-  lotNet: number;
-  portfolioRoi: number;
-};
-
-type MonthlyProfit = {
-  key: string;
-  label: string;
-  revenue: number;
-  cost: number;
-  profit: number;
-  quantity: number;
-};
-
-type InventoryRow = {
-  id: string;
-  lotId: string;
-  lotLabel: string;
-  checkedOutAt: string;
-  item: DealLotItem;
-  remaining: number;
-  buyCost: number;
-  marketValue: number;
-  spread: number;
-};
-
-type LotStatusBadge = {
-  label: string;
-  tone: "open" | "sold" | "profit" | "loss" | "neutral";
-};
-
-const LOT_HISTORY_FILTER_OPTIONS: {
-  label: string;
-  value: LotHistoryFilter;
-}[] = [
-  { label: "All", value: "all" },
-  { label: "Open", value: "open" },
-  { label: "Fully sold", value: "sold" },
-  { label: "Profitable", value: "profitable" },
-  { label: "At loss", value: "loss" }
-];
-
-const LOT_HISTORY_SORT_OPTIONS: {
-  label: string;
-  value: LotHistorySort;
-}[] = [
-  { label: "Newest", value: "newest" },
-  { label: "Oldest", value: "oldest" },
-  { label: "Profit", value: "profit" },
-  { label: "ROI", value: "roi" },
-  { label: "Remaining cards", value: "remaining" },
-  { label: "Buy cost", value: "buy-cost" }
-];
-
-const LANDING_CARDS = [
-  {
-    id: "sv3-125",
-    name: "Charizard ex",
-    meta: "Obsidian Flames",
-    imageUrl: "https://images.pokemontcg.io/sv3/125.png"
-  },
-  {
-    id: "sv3pt5-25",
-    name: "Pikachu",
-    meta: "Scarlet & Violet 151",
-    imageUrl: "https://images.pokemontcg.io/sv3pt5/25.png"
-  },
-  {
-    id: "swsh7-215",
-    name: "Umbreon VMAX",
-    meta: "Evolving Skies",
-    imageUrl: "https://images.pokemontcg.io/swsh7/215.png"
-  },
-  {
-    id: "sv4-248",
-    name: "Iron Hands ex",
-    meta: "Paradox Rift",
-    imageUrl: "https://images.pokemontcg.io/sv4/248.png"
-  },
-  {
-    id: "swsh8-271",
-    name: "Gengar VMAX",
-    meta: "Fusion Strike",
-    imageUrl: "https://images.pokemontcg.io/swsh8/271.png"
-  },
-  {
-    id: "swsh12-186",
-    name: "Lugia V",
-    meta: "Silver Tempest",
-    imageUrl: "https://images.pokemontcg.io/swsh12/186.png"
-  },
-  {
-    id: "swsh11-186",
-    name: "Giratina V",
-    meta: "Lost Origin",
-    imageUrl: "https://images.pokemontcg.io/swsh11/186.png"
-  },
-  {
-    id: "swsh7-218",
-    name: "Rayquaza VMAX",
-    meta: "Evolving Skies",
-    imageUrl: "https://images.pokemontcg.io/swsh7/218.png"
-  },
-  {
-    id: "sv3pt5-199",
-    name: "Charizard ex",
-    meta: "Pokemon 151",
-    imageUrl: "https://images.pokemontcg.io/sv3pt5/199.png"
-  },
-  {
-    id: "sv3pt5-200",
-    name: "Blastoise ex",
-    meta: "Pokemon 151",
-    imageUrl: "https://images.pokemontcg.io/sv3pt5/200.png"
-  },
-  {
-    id: "sv3pt5-198",
-    name: "Venusaur ex",
-    meta: "Pokemon 151",
-    imageUrl: "https://images.pokemontcg.io/sv3pt5/198.png"
-  },
-  {
-    id: "sv2-203",
-    name: "Magikarp",
-    meta: "Paldea Evolved",
-    imageUrl: "https://images.pokemontcg.io/sv2/203.png"
-  },
-  {
-    id: "sv6-214",
-    name: "Greninja ex",
-    meta: "Twilight Masquerade",
-    imageUrl: "https://images.pokemontcg.io/sv6/214.png"
-  },
-  {
-    id: "base1-4",
-    name: "Charizard",
-    meta: "Base Set",
-    imageUrl: "https://images.pokemontcg.io/base1/4.png"
-  },
-  {
-    id: "base1-2",
-    name: "Blastoise",
-    meta: "Base Set",
-    imageUrl: "https://images.pokemontcg.io/base1/2.png"
-  },
-  {
-    id: "base1-15",
-    name: "Venusaur",
-    meta: "Base Set",
-    imageUrl: "https://images.pokemontcg.io/base1/15.png"
-  }
-] as const;
-
-const EMPTY_SEARCH_PAGINATION: SearchPagination = {
-  page: DEFAULT_SEARCH_PAGE,
-  pageSize: SEARCH_PAGE_SIZE,
-  count: 0,
-  totalCount: 0
-};
+import {
+  defaultPortfolioProfile,
+  deleteCloudPortfolioItem,
+  loadCloudPortfolioItems,
+  loadCloudPortfolioProfile,
+  loadPublicPortfolioPins,
+  saveCloudPortfolioItem,
+  saveCloudPortfolioProfile,
+  type PortfolioProfile
+} from "@/lib/supabase/portfolio";
+import {
+  deriveCurrentDealTotals,
+  deriveInventoryRows,
+  deriveLotPerformance,
+  deriveMonthlyProfit,
+  derivePortfolioSummary,
+  getHistorySelectedLot,
+  getMaxMonthlyProfit,
+  getVisibleLots
+} from "./workspace/analytics";
+import { AppHeader } from "./workspace/components/app-header";
+import { AnalyticsView } from "./workspace/components/analytics-view";
+import { CurrentDealView } from "./workspace/components/current-deal-view";
+import { InventoryView } from "./workspace/components/inventory-view";
+import { NearbyView } from "./workspace/components/nearby-view";
+import {
+  LandingHero,
+  landingCardsForOffset
+} from "./workspace/components/landing-hero";
+import { PortfolioView } from "./workspace/components/portfolio-view";
+import { RecentBuysView } from "./workspace/components/recent-buys-view";
+import { WorkspaceTabs } from "./workspace/components/workspace-tabs";
+import {
+  DEFAULT_BUY_PERCENT,
+  EMPTY_SEARCH_PAGINATION,
+  LANDING_CARDS,
+  MAX_DISPLAY_NAME_LENGTH,
+  MAX_LOT_LABEL_LENGTH,
+  PORTFOLIO_ITEMS_STORAGE_KEY,
+  PORTFOLIO_PROFILE_STORAGE_KEY,
+  RECENT_BUYS_STORAGE_KEY,
+  STORAGE_KEY
+} from "./workspace/constants";
+import {
+  clampPercent,
+  createDealLotItem,
+  createId,
+  isValidPercent,
+  saleDraftKey
+} from "./workspace/deal-helpers";
+import {
+  escapeCsvValue,
+  formatLotLabel,
+  sourceLabel
+} from "./workspace/formatters";
+import {
+  appendOptionalParam,
+  getSelectedVariant,
+  sortCardsByMarketAvailability,
+  toSearchFilters
+} from "./workspace/search";
+import {
+  clearLocalPortfolioStorage,
+  clearLocalDealStorage,
+  readStoredDeal,
+  readStoredPortfolioItems,
+  readStoredPortfolioProfile,
+  readStoredRecentBuys
+} from "./workspace/storage";
+import type {
+  ActiveTab,
+  ApiErrorResponse,
+  AuthMode,
+  CitySearchResponse,
+  InventoryMode,
+  InventorySort,
+  LotHistoryFilter,
+  LotHistorySort,
+  NearbySort,
+  SaleDraft,
+  SearchFilters
+} from "./workspace/types";
 
 export default function Home() {
   const supabaseClient = useMemo(() => getSupabaseBrowserClient(), []);
@@ -308,9 +144,7 @@ export default function Home() {
     useState<CardCondition>("Near Mint");
   const [results, setResults] = useState<CardSearchResult[]>([]);
   const [activeSearch, setActiveSearch] = useState<SearchFilters | null>(null);
-  const [pagination, setPagination] = useState<SearchPagination>(
-    EMPTY_SEARCH_PAGINATION
-  );
+  const [pagination, setPagination] = useState(EMPTY_SEARCH_PAGINATION);
   const [selectedVariants, setSelectedVariants] = useState<
     Record<string, string>
   >({});
@@ -334,6 +168,51 @@ export default function Home() {
   const [inventoryQuery, setInventoryQuery] = useState("");
   const [inventoryMode, setInventoryMode] = useState<InventoryMode>("unsold");
   const [inventorySort, setInventorySort] = useState<InventorySort>("value");
+  const [portfolioProfile, setPortfolioProfile] = useState<PortfolioProfile>(
+    defaultPortfolioProfile()
+  );
+  const [portfolioItems, setPortfolioItems] = useState<PortfolioItem[]>([]);
+  const [portfolioMessage, setPortfolioMessage] = useState("");
+  const [cityQuery, setCityQuery] = useState("");
+  const [cityResults, setCityResults] = useState<CityLocation[]>([]);
+  const [cityMessage, setCityMessage] = useState("");
+  const [isCitySearching, setIsCitySearching] = useState(false);
+  const [portfolioSearchQuery, setPortfolioSearchQuery] = useState("");
+  const [portfolioSearchSetName, setPortfolioSearchSetName] = useState("");
+  const [portfolioSearchCardNumber, setPortfolioSearchCardNumber] = useState("");
+  const [portfolioSearchResults, setPortfolioSearchResults] = useState<
+    CardSearchResult[]
+  >([]);
+  const [portfolioSearchError, setPortfolioSearchError] = useState("");
+  const [portfolioProviderNotice, setPortfolioProviderNotice] = useState("");
+  const [hasPortfolioSearched, setHasPortfolioSearched] = useState(false);
+  const [isPortfolioSearching, setIsPortfolioSearching] = useState(false);
+  const [portfolioSearchPagination, setPortfolioSearchPagination] = useState(
+    EMPTY_SEARCH_PAGINATION
+  );
+  const [portfolioSelectedVariants, setPortfolioSelectedVariants] = useState<
+    Record<string, string>
+  >({});
+  const [portfolioOwnershipType, setPortfolioOwnershipType] =
+    useState<PortfolioOwnershipType>("raw");
+  const [portfolioAddCondition, setPortfolioAddCondition] =
+    useState<CardCondition>("Near Mint");
+  const [portfolioAddGrader, setPortfolioAddGrader] =
+    useState<NonNullable<PortfolioItem["grader"]>>("PSA");
+  const [portfolioAddGrade, setPortfolioAddGrade] = useState("10");
+  const [portfolioAddQuantity, setPortfolioAddQuantity] = useState("1");
+  const [portfolioAddCertNumber, setPortfolioAddCertNumber] = useState("");
+  const [portfolioAddNotes, setPortfolioAddNotes] = useState("");
+  const [portfolioAddItemPublic, setPortfolioAddItemPublic] = useState(true);
+  const [refreshingPortfolioItemId, setRefreshingPortfolioItemId] = useState("");
+  const [publicPortfolioPins, setPublicPortfolioPins] = useState<
+    PublicPortfolioPin[]
+  >([]);
+  const [nearbyMessage, setNearbyMessage] = useState("");
+  const [isNearbyLoading, setIsNearbyLoading] = useState(false);
+  const [nearbyCardQuery, setNearbyCardQuery] = useState("");
+  const [nearbyMaxDistance, setNearbyMaxDistance] = useState("50");
+  const [nearbySort, setNearbySort] = useState<NearbySort>("distance");
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [globalBuyPercent, setGlobalBuyPercent] =
     useState(DEFAULT_BUY_PERCENT);
@@ -414,29 +293,10 @@ export default function Home() {
   }, [supabaseClient]);
 
   useEffect(() => {
-    const rawDeal = window.localStorage.getItem(STORAGE_KEY);
-    const rawRecentBuys = window.localStorage.getItem(RECENT_BUYS_STORAGE_KEY);
-    let storedDeal: StoredDeal = {};
-    let storedRecentBuys: DealLot[] = [];
-
-    if (rawDeal) {
-      try {
-        storedDeal = JSON.parse(rawDeal) as StoredDeal;
-      } catch {
-        window.localStorage.removeItem(STORAGE_KEY);
-      }
-    }
-
-    if (rawRecentBuys) {
-      try {
-        const parsedRecentBuys = JSON.parse(rawRecentBuys) as unknown;
-        if (Array.isArray(parsedRecentBuys)) {
-          storedRecentBuys = parsedRecentBuys as DealLot[];
-        }
-      } catch {
-        window.localStorage.removeItem(RECENT_BUYS_STORAGE_KEY);
-      }
-    }
+    const storedDeal = readStoredDeal();
+    const storedRecentBuys = readStoredRecentBuys();
+    const storedPortfolioProfile = readStoredPortfolioProfile();
+    const storedPortfolioItems = readStoredPortfolioItems();
 
     const frame = window.requestAnimationFrame(() => {
       if (Array.isArray(storedDeal.cart)) {
@@ -444,6 +304,9 @@ export default function Home() {
       }
       setRecentBuys(storedRecentBuys);
       setSelectedLotId(storedRecentBuys[0]?.id ?? null);
+      setPortfolioProfile(storedPortfolioProfile);
+      setCityQuery(storedPortfolioProfile.location?.placeName ?? "");
+      setPortfolioItems(storedPortfolioItems);
       if (isValidPercent(storedDeal.globalBuyPercent)) {
         setGlobalBuyPercent(storedDeal.globalBuyPercent);
       }
@@ -491,6 +354,28 @@ export default function Home() {
   }, [recentBuys, hasHydrated, session]);
 
   useEffect(() => {
+    if (!hasHydrated || session) {
+      return;
+    }
+
+    window.localStorage.setItem(
+      PORTFOLIO_PROFILE_STORAGE_KEY,
+      JSON.stringify(portfolioProfile)
+    );
+  }, [hasHydrated, portfolioProfile, session]);
+
+  useEffect(() => {
+    if (!hasHydrated || session) {
+      return;
+    }
+
+    window.localStorage.setItem(
+      PORTFOLIO_ITEMS_STORAGE_KEY,
+      JSON.stringify(portfolioItems)
+    );
+  }, [hasHydrated, portfolioItems, session]);
+
+  useEffect(() => {
     if (!supabaseClient || !session || !hasHydrated || hasCloudDataLoaded) {
       return;
     }
@@ -512,15 +397,30 @@ export default function Home() {
           DEFAULT_BUY_PERCENT
         );
         let cloudLots = await loadCloudLots(supabaseClient, session.user.id);
+        let cloudPortfolioProfile = await loadCloudPortfolioProfile(
+          supabaseClient,
+          session.user.id
+        );
+        let cloudPortfolioItems = await loadCloudPortfolioItems(
+          supabaseClient,
+          session.user.id
+        );
 
         if (!cloudDeal.importedLocalData) {
           const localDeal = readStoredDeal();
           const localLots = readStoredRecentBuys();
+          const localPortfolioProfile = readStoredPortfolioProfile();
+          const localPortfolioItems = readStoredPortfolioItems();
           const shouldImportCart =
             Array.isArray(localDeal.cart) &&
             localDeal.cart.length > 0 &&
             cloudDeal.cart.length === 0;
           const shouldImportLots = localLots.length > 0;
+          const shouldImportPortfolio = localPortfolioItems.length > 0;
+          const shouldImportProfile =
+            localPortfolioProfile.location !== null ||
+            localPortfolioProfile.displayName !== "Collector" ||
+            localPortfolioProfile.portfolioPublic;
 
           if (shouldImportCart) {
             await saveCloudDealState(
@@ -529,7 +429,7 @@ export default function Home() {
               localDeal.cart ?? [],
               isValidPercent(localDeal.globalBuyPercent)
                 ? localDeal.globalBuyPercent
-              : DEFAULT_BUY_PERCENT
+                : DEFAULT_BUY_PERCENT
             );
           } else {
             await saveCloudDealState(
@@ -544,16 +444,39 @@ export default function Home() {
             await saveCloudLots(supabaseClient, session.user.id, localLots);
           }
 
+          if (shouldImportProfile) {
+            await saveCloudPortfolioProfile(
+              supabaseClient,
+              session.user.id,
+              localPortfolioProfile
+            );
+          }
+
+          if (shouldImportPortfolio) {
+            for (const item of localPortfolioItems) {
+              await saveCloudPortfolioItem(supabaseClient, session.user.id, item);
+            }
+          }
+
           clearLocalDealStorage();
+          clearLocalPortfolioStorage();
           cloudDeal = await loadCloudDealState(
             supabaseClient,
             session.user.id,
             DEFAULT_BUY_PERCENT
           );
           cloudLots = await loadCloudLots(supabaseClient, session.user.id);
+          cloudPortfolioProfile = await loadCloudPortfolioProfile(
+            supabaseClient,
+            session.user.id
+          );
+          cloudPortfolioItems = await loadCloudPortfolioItems(
+            supabaseClient,
+            session.user.id
+          );
 
           setCloudMessage(
-            shouldImportCart || shouldImportLots
+            shouldImportCart || shouldImportLots || shouldImportPortfolio
               ? "Imported local data and enabled cloud sync."
               : "Cloud sync enabled."
           );
@@ -573,6 +496,9 @@ export default function Home() {
         );
         setRecentBuys(cloudLots);
         setSelectedLotId(cloudLots[0]?.id ?? null);
+        setPortfolioProfile(cloudPortfolioProfile);
+        setCityQuery(cloudPortfolioProfile.location?.placeName ?? "");
+        setPortfolioItems(cloudPortfolioItems);
         setHasCloudDataLoaded(true);
       } catch (error) {
         if (!isCancelled) {
@@ -669,226 +595,51 @@ export default function Home() {
       : landingCardsForOffset(previousLandingOffset);
   }, [previousLandingOffset]);
 
-  const totals = useMemo(() => {
-    return cart.reduce(
-      (summary, item) => {
-        const marketTotal = effectiveMarketPrice(item) * item.quantity;
-        summary.marketValue += marketTotal;
-        summary.payout += totalPayout(item);
-        summary.quantity += item.quantity;
-        return summary;
-      },
-      { marketValue: 0, payout: 0, quantity: 0 }
-    );
-  }, [cart]);
-  const portfolioSummary = useMemo(() => {
-    return portfolioTotals(recentBuys);
-  }, [recentBuys]);
-  const lotPerformance = useMemo(() => {
-    return recentBuys
-      .map<LotPerformance>((lot) => {
-        const totals = lotTotals(lot);
-        const lotNet = lotNetProfit(lot);
-
-        return {
-          lot,
-          totals,
-          lotNet,
-          portfolioRoi: roiPercent(lotNet, totals.buyCost)
-        };
-      })
-      .sort((first, second) => second.lotNet - first.lotNet);
-  }, [recentBuys]);
-  const visibleLots = useMemo(() => {
-    const query = lotHistoryQuery.trim().toLowerCase();
-
-    return recentBuys
-      .filter((lot) => {
-        const totals = lotTotals(lot);
-        const lotNet = lotNetProfit(lot);
-
-        switch (lotHistoryFilter) {
-          case "open":
-            return totals.remainingQuantity > 0;
-          case "sold":
-            return totals.quantity > 0 && totals.remainingQuantity === 0;
-          case "profitable":
-            return lotNet > 0;
-          case "loss":
-            return (
-              lotNet < 0 &&
-              (totals.soldRevenue > 0 || totals.remainingQuantity === 0)
-            );
-          case "all":
-          default:
-            return true;
-        }
-      })
-      .filter((lot) => {
-        if (!query) {
-          return true;
-        }
-
-        return [
-          lot.label,
-          formatDateTime(lot.checkedOutAt),
-          ...lot.items.flatMap((item) => [
-            item.name,
-            item.setName,
-            item.cardNumber,
-            item.rarity,
-            item.condition,
-            item.variantLabel
-          ])
-        ]
-          .join(" ")
-          .toLowerCase()
-          .includes(query);
-      })
-      .sort((first, second) => {
-        const firstTotals = lotTotals(first);
-        const secondTotals = lotTotals(second);
-        const firstNet = lotNetProfit(first);
-        const secondNet = lotNetProfit(second);
-
-        switch (lotHistorySort) {
-          case "oldest":
-            return (
-              new Date(first.checkedOutAt).getTime() -
-              new Date(second.checkedOutAt).getTime()
-            );
-          case "profit":
-            return secondNet - firstNet;
-          case "roi":
-            return (
-              roiPercent(secondNet, secondTotals.buyCost) -
-              roiPercent(firstNet, firstTotals.buyCost)
-            );
-          case "remaining":
-            return secondTotals.remainingQuantity - firstTotals.remainingQuantity;
-          case "buy-cost":
-            return secondTotals.buyCost - firstTotals.buyCost;
-          case "newest":
-          default:
-            return (
-              new Date(second.checkedOutAt).getTime() -
-              new Date(first.checkedOutAt).getTime()
-            );
-        }
-      });
-  }, [lotHistoryFilter, lotHistoryQuery, lotHistorySort, recentBuys]);
+  const totals = useMemo(() => deriveCurrentDealTotals(cart), [cart]);
+  const portfolioSummary = useMemo(
+    () => derivePortfolioSummary(recentBuys),
+    [recentBuys]
+  );
+  const lotPerformance = useMemo(
+    () => deriveLotPerformance(recentBuys),
+    [recentBuys]
+  );
+  const visibleLots = useMemo(
+    () =>
+      getVisibleLots(
+        recentBuys,
+        lotHistoryQuery,
+        lotHistoryFilter,
+        lotHistorySort
+      ),
+    [lotHistoryFilter, lotHistoryQuery, lotHistorySort, recentBuys]
+  );
   const historySelectedLot = useMemo(() => {
-    return (
-      visibleLots.find((lot) => lot.id === selectedLotId) ??
-      visibleLots[0] ??
-      null
-    );
+    return getHistorySelectedLot(visibleLots, selectedLotId);
   }, [selectedLotId, visibleLots]);
   const historySelectedLotTotals = useMemo(() => {
     return historySelectedLot ? lotTotals(historySelectedLot) : null;
   }, [historySelectedLot]);
-  const monthlyProfit = useMemo(() => {
-    const months = new Map<string, MonthlyProfit>();
-
-    recentBuys.forEach((lot) => {
-      lot.items.forEach((item) => {
-        item.sales.forEach((sale) => {
-          const soldAt = new Date(sale.soldAt);
-          const key = Number.isNaN(soldAt.getTime())
-            ? "unknown"
-            : `${soldAt.getFullYear()}-${String(soldAt.getMonth() + 1).padStart(2, "0")}`;
-          const label =
-            key === "unknown"
-              ? "Unknown"
-              : soldAt.toLocaleDateString("en-US", {
-                  month: "short",
-                  year: "numeric"
-                });
-          const current = months.get(key) ?? {
-            key,
-            label,
-            revenue: 0,
-            cost: 0,
-            profit: 0,
-            quantity: 0
-          };
-
-          current.revenue += sale.saleTotal;
-          current.cost += item.buyUnitPrice * sale.quantity;
-          current.quantity += sale.quantity;
-          current.profit = current.revenue - current.cost;
-          months.set(key, current);
-        });
-      });
-    });
-
-    return [...months.values()]
-      .map((month) => ({
-        ...month,
-        revenue: roundCurrency(month.revenue),
-        cost: roundCurrency(month.cost),
-        profit: roundCurrency(month.profit)
-      }))
-      .sort((first, second) => first.key.localeCompare(second.key));
-  }, [recentBuys]);
+  const monthlyProfit = useMemo(
+    () => deriveMonthlyProfit(recentBuys),
+    [recentBuys]
+  );
   const maxMonthlyProfit = useMemo(() => {
-    return Math.max(1, ...monthlyProfit.map((month) => Math.abs(month.profit)));
+    return getMaxMonthlyProfit(monthlyProfit);
   }, [monthlyProfit]);
-  const inventoryRows = useMemo(() => {
-    const query = inventoryQuery.trim().toLowerCase();
-
-    return recentBuys
-      .flatMap<InventoryRow>((lot) =>
-        lot.items.map((item) => ({
-          id: `${lot.id}|${item.id}`,
-          lotId: lot.id,
-          lotLabel: lot.label,
-          checkedOutAt: lot.checkedOutAt,
-          item,
-          remaining: remainingQuantity(item),
-          buyCost: remainingCost(item),
-          marketValue: remainingMarketValue(item),
-          spread: remainingSpread(item)
-        }))
-      )
-      .filter((row) => inventoryMode === "all" || row.remaining > 0)
-      .filter((row) => {
-        if (!query) {
-          return true;
-        }
-
-        return [
-          row.item.name,
-          row.item.setName,
-          row.item.cardNumber,
-          row.item.rarity,
-          row.item.condition,
-          row.item.variantLabel,
-          row.lotLabel
-        ]
-          .join(" ")
-          .toLowerCase()
-          .includes(query);
-      })
-      .sort((first, second) => {
-        switch (inventorySort) {
-          case "cost":
-            return second.buyCost - first.buyCost;
-          case "name":
-            return first.item.name.localeCompare(second.item.name);
-          case "spread":
-            return second.spread - first.spread;
-          case "value":
-            return second.marketValue - first.marketValue;
-          case "newest":
-          default:
-            return (
-              new Date(second.checkedOutAt).getTime() -
-              new Date(first.checkedOutAt).getTime()
-            );
-        }
-      });
-  }, [inventoryMode, inventoryQuery, inventorySort, recentBuys]);
+  const inventoryRows = useMemo(
+    () =>
+      deriveInventoryRows(
+        recentBuys,
+        inventoryQuery,
+        inventoryMode,
+        inventorySort
+      ),
+    [inventoryMode, inventoryQuery, inventorySort, recentBuys]
+  );
+  const portfolioWorth = useMemo(() => {
+    return estimatePortfolioWorth(portfolioItems.map((item) => ({ item })));
+  }, [portfolioItems]);
   const displayedResults = useMemo(() => {
     return pushNoMarketCardsDown ? sortCardsByMarketAvailability(results) : results;
   }, [pushNoMarketCardsDown, results]);
@@ -975,6 +726,10 @@ export default function Home() {
     setHasCloudDataLoaded(false);
     setCart([]);
     setRecentBuys([]);
+    setPortfolioProfile(defaultPortfolioProfile());
+    setPortfolioItems([]);
+    setPublicPortfolioPins([]);
+    setNearbyMessage("");
     setSelectedLotId(null);
     setGlobalBuyPercent(DEFAULT_BUY_PERCENT);
     setAuthMessage("Signed out. Local mode is active.");
@@ -1183,7 +938,7 @@ export default function Home() {
       return;
     }
 
-    const soldQuantity = Math.min(quantity, remainingQuantity(item));
+    const soldQuantity = Math.min(quantity, item.quantity - item.soldQuantity);
     if (soldQuantity < 1) {
       return;
     }
@@ -1374,6 +1129,392 @@ export default function Home() {
     setActiveTab("recent");
   }
 
+  async function handleCitySearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const query = cityQuery.trim();
+    if (query.length < 2) {
+      setCityMessage("Enter at least 2 characters to search cities.");
+      return;
+    }
+
+    setIsCitySearching(true);
+    setCityMessage("");
+
+    try {
+      const response = await fetch(
+        `/api/locations/city-search?q=${encodeURIComponent(query)}`
+      );
+      const payload = (await response.json()) as CitySearchResponse;
+      if (!response.ok) {
+        throw new Error(payload.error ?? "City search failed.");
+      }
+
+      setCityResults(payload.cities ?? []);
+      setCityMessage(payload.message ?? "");
+    } catch (error) {
+      setCityResults([]);
+      setCityMessage(
+        error instanceof Error ? error.message : "Unable to search cities."
+      );
+    } finally {
+      setIsCitySearching(false);
+    }
+  }
+
+  function selectPortfolioCity(city: CityLocation) {
+    setPortfolioProfile((current) => ({
+      ...current,
+      location: city
+    }));
+    setCityQuery(city.placeName);
+    setCityResults([]);
+    setCityMessage("");
+  }
+
+  function clearPortfolioCity() {
+    setPortfolioProfile((current) => ({
+      ...current,
+      location: null,
+      portfolioPublic: false
+    }));
+    setCityQuery("");
+    setCityResults([]);
+  }
+
+  async function savePortfolioProfile() {
+    const displayName = portfolioProfile.displayName.trim();
+    if (!displayName) {
+      setPortfolioMessage("Enter a display name.");
+      return;
+    }
+
+    if (displayName.length > MAX_DISPLAY_NAME_LENGTH) {
+      setPortfolioMessage(
+        `Keep the display name under ${MAX_DISPLAY_NAME_LENGTH} characters.`
+      );
+      return;
+    }
+
+    if (portfolioProfile.portfolioPublic && !portfolioProfile.location) {
+      setPortfolioMessage("Choose a city before revealing your portfolio.");
+      return;
+    }
+
+    if (portfolioProfile.portfolioPublic && !session) {
+      setPortfolioMessage("Sign in before revealing your portfolio.");
+      setPortfolioProfile((current) => ({ ...current, portfolioPublic: false }));
+      return;
+    }
+
+    const nextProfile = {
+      ...portfolioProfile,
+      displayName
+    };
+    setPortfolioProfile(nextProfile);
+
+    if (supabaseClient && session && hasCloudDataLoaded) {
+      try {
+        await saveCloudPortfolioProfile(
+          supabaseClient,
+          session.user.id,
+          nextProfile
+        );
+        setPortfolioMessage("Portfolio settings saved.");
+      } catch (error) {
+        setPortfolioMessage(
+          error instanceof Error
+            ? `Unable to save portfolio settings: ${error.message}`
+            : "Unable to save portfolio settings."
+        );
+      }
+      return;
+    }
+
+    setPortfolioMessage("Portfolio settings saved locally.");
+  }
+
+  async function handlePortfolioSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const filters = toSearchFilters(
+      portfolioSearchQuery,
+      portfolioSearchSetName,
+      portfolioSearchCardNumber,
+      ""
+    );
+
+    if (filters.query.length < 2) {
+      setPortfolioSearchError("Enter at least 2 characters to search.");
+      return;
+    }
+
+    setIsPortfolioSearching(true);
+    setPortfolioSearchError("");
+    setPortfolioProviderNotice("");
+    setHasPortfolioSearched(true);
+
+    const params = new URLSearchParams({
+      q: filters.query,
+      page: DEFAULT_SEARCH_PAGE.toString()
+    });
+    appendOptionalParam(params, "set", filters.setName);
+    appendOptionalParam(params, "number", filters.cardNumber);
+
+    try {
+      const response = await fetch(`/api/cards/search?${params.toString()}`);
+      const payload = (await response.json()) as
+        | ProviderSearchResponse
+        | ApiErrorResponse;
+
+      if (!response.ok) {
+        throw new Error(
+          "error" in payload && payload.error
+            ? payload.error
+            : "Card search failed."
+        );
+      }
+
+      const data = payload as ProviderSearchResponse;
+      setPortfolioSearchResults(data.cards);
+      setPortfolioSearchPagination({
+        page: data.page,
+        pageSize: data.pageSize,
+        count: data.count,
+        totalCount: data.totalCount
+      });
+      setPortfolioProviderNotice(data.message ?? "");
+      setPortfolioSelectedVariants((current) => {
+        const next = { ...current };
+        data.cards.forEach((card) => {
+          if (!next[card.id] && card.variants[0]) {
+            next[card.id] = card.variants[0].id;
+          }
+        });
+        return next;
+      });
+    } catch (error) {
+      setPortfolioSearchResults([]);
+      setPortfolioSearchPagination(EMPTY_SEARCH_PAGINATION);
+      setPortfolioSearchError(
+        error instanceof Error ? error.message : "Unable to search cards."
+      );
+    } finally {
+      setIsPortfolioSearching(false);
+    }
+  }
+
+  function addCardToPortfolio(card: CardSearchResult) {
+    const variant = getSelectedVariant(card, portfolioSelectedVariants[card.id]);
+    if (!variant) {
+      return;
+    }
+
+    const quantity = Math.max(1, Math.floor(Number(portfolioAddQuantity)));
+    const grade = portfolioAddGrade.trim();
+    if (portfolioOwnershipType === "graded" && !grade) {
+      setPortfolioMessage("Enter a grade for graded cards.");
+      return;
+    }
+
+    const variantPrice = variant.marketPrice ?? 0;
+    const now = new Date().toISOString();
+    const tierKey =
+      portfolioOwnershipType === "graded"
+        ? `${portfolioAddGrader}-${grade}`
+        : portfolioAddCondition;
+    const id = `${card.id}|${variant.id}|${portfolioOwnershipType}|${tierKey}`;
+    const priceSources: PortfolioPriceSource[] =
+      variant.marketPrice === null
+        ? []
+        : [
+            {
+              source: sourceLabel(card.priceSource),
+              marketPrice: variantPrice,
+              currency: "USD",
+              transactions: [],
+              averageLastFive: null,
+              lastUpdated: card.lastUpdated || now,
+              message: "Current provider market price; refresh for recent comps."
+            }
+          ];
+
+    const nextItem: PortfolioItem = {
+      id,
+      providerCardId: card.id,
+      variantId: variant.id,
+      variantLabel: variant.label,
+      name: card.name,
+      setName: card.setName,
+      cardNumber: card.cardNumber,
+      rarity: card.rarity,
+      imageUrl: card.imageUrl,
+      externalUrl: card.externalUrl,
+      ownershipType: portfolioOwnershipType,
+      condition:
+        portfolioOwnershipType === "raw" ? portfolioAddCondition : undefined,
+      grader:
+        portfolioOwnershipType === "graded" ? portfolioAddGrader : undefined,
+      grade: portfolioOwnershipType === "graded" ? grade : undefined,
+      certNumber:
+        portfolioOwnershipType === "graded"
+          ? portfolioAddCertNumber.trim() || undefined
+          : undefined,
+      quantity,
+      estimatedUnitValue: variantPrice,
+      priceUpdatedAt: card.lastUpdated || now,
+      priceSources,
+      isPublic: portfolioAddItemPublic,
+      notes: portfolioAddNotes.trim()
+    };
+
+    const existing = portfolioItems.find((item) => item.id === id);
+    const itemToSave = existing
+      ? {
+          ...existing,
+          quantity: existing.quantity + quantity,
+          isPublic: portfolioAddItemPublic,
+          notes: portfolioAddNotes.trim() || existing.notes
+        }
+      : nextItem;
+    setPortfolioItems((current) =>
+      existing
+        ? current.map((item) => (item.id === id ? itemToSave : item))
+        : [nextItem, ...current]
+    );
+    persistPortfolioItem(itemToSave);
+    setPortfolioMessage("Added card to portfolio.");
+  }
+
+  function updatePortfolioItem(
+    itemId: string,
+    updater: (item: PortfolioItem) => PortfolioItem
+  ) {
+    let nextItem: PortfolioItem | null = null;
+    setPortfolioItems((current) =>
+      current.map((item) => {
+        if (item.id !== itemId) {
+          return item;
+        }
+
+        nextItem = updater(item);
+        return nextItem;
+      })
+    );
+
+    if (nextItem) {
+      persistPortfolioItem(nextItem);
+    }
+  }
+
+  function persistPortfolioItem(item: PortfolioItem) {
+    if (supabaseClient && session && hasCloudDataLoaded) {
+      saveCloudPortfolioItem(supabaseClient, session.user.id, item).catch(
+        (error: unknown) => {
+          setPortfolioMessage(
+            error instanceof Error
+              ? `Unable to save portfolio item: ${error.message}`
+              : "Unable to save portfolio item."
+          );
+        }
+      );
+    }
+  }
+
+  async function deletePortfolioItem(itemId: string) {
+    if (supabaseClient && session && hasCloudDataLoaded) {
+      try {
+        await deleteCloudPortfolioItem(supabaseClient, session.user.id, itemId);
+      } catch (error) {
+        setPortfolioMessage(
+          error instanceof Error
+            ? `Unable to delete portfolio item: ${error.message}`
+            : "Unable to delete portfolio item."
+        );
+        return;
+      }
+    }
+
+    setPortfolioItems((current) => current.filter((item) => item.id !== itemId));
+    setPortfolioMessage("Removed portfolio item.");
+  }
+
+  async function refreshPortfolioItemPrice(item: PortfolioItem) {
+    setRefreshingPortfolioItemId(item.id);
+    setPortfolioMessage("");
+
+    try {
+      const response = await fetch("/api/cards/price-research", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          providerCardId: item.providerCardId,
+          name: item.name,
+          setName: item.setName,
+          cardNumber: item.cardNumber,
+          variantLabel: item.variantLabel,
+          ownershipType: item.ownershipType,
+          condition: item.condition,
+          grader: item.grader,
+          grade: item.grade,
+          fallbackMarketPrice: item.estimatedUnitValue
+        })
+      });
+      const payload = (await response.json()) as
+        | PortfolioPriceResearchResponse
+        | ApiErrorResponse;
+
+      if (!response.ok) {
+        throw new Error(
+          "error" in payload && payload.error
+            ? payload.error
+            : "Price research failed."
+        );
+      }
+
+      const research = payload as PortfolioPriceResearchResponse;
+      const nextItem = {
+        ...item,
+        estimatedUnitValue: research.estimatedUnitValue,
+        priceSources: research.sources,
+        priceUpdatedAt: new Date().toISOString()
+      };
+      updatePortfolioItem(item.id, () => nextItem);
+      setPortfolioMessage(research.message ?? "Portfolio price refreshed.");
+    } catch (error) {
+      setPortfolioMessage(
+        error instanceof Error
+          ? `Unable to refresh price: ${error.message}`
+          : "Unable to refresh price."
+      );
+    } finally {
+      setRefreshingPortfolioItemId("");
+    }
+  }
+
+  async function refreshPublicPortfolios() {
+    if (!supabaseClient || !session) {
+      setNearbyMessage("Sign in to browse nearby portfolios.");
+      return;
+    }
+
+    setIsNearbyLoading(true);
+    setNearbyMessage("");
+
+    try {
+      const pins = await loadPublicPortfolioPins(supabaseClient);
+      setPublicPortfolioPins(pins);
+      setNearbyMessage("Loaded city-level public portfolios.");
+    } catch (error) {
+      setPublicPortfolioPins([]);
+      setNearbyMessage(
+        error instanceof Error
+          ? `Unable to load nearby portfolios: ${error.message}`
+          : "Unable to load nearby portfolios."
+      );
+    } finally {
+      setIsNearbyLoading(false);
+    }
+  }
+
   function scrollToWorkspace(tab?: ActiveTab) {
     if (tab) {
       setActiveTab(tab);
@@ -1442,1634 +1583,217 @@ export default function Home() {
 
   return (
     <>
-      <AuroraBackground
-        className="landing-hero dark"
-        aria-label="OfferTCG landing page"
-      >
-        <div className="landing-card-scene" aria-hidden="true">
-          {previousLandingCards ? (
-            <div
-              className="landing-card-layer exiting"
-              key={`previous-${previousLandingOffset}`}
-            >
-              {previousLandingCards.map((card, index) => (
-                <LandingCard card={card} index={index} key={card.id} />
-              ))}
-            </div>
-          ) : null}
-
-          <div
-            className="landing-card-layer entering"
-            key={`current-${visibleLandingOffset}`}
-          >
-            {visibleLandingCards.map((card, index) => (
-              <LandingCard
-                card={card}
-                index={index}
-                key={card.id}
-                priority={visibleLandingOffset === 0 && index < 2}
-              />
-            ))}
-          </div>
-        </div>
-
-        <div className="landing-content">
-          <p className="landing-eyebrow">
-            <Sparkles size={17} />
-            Pokemon vendor deal desk
-          </p>
-          <h1>OfferTCG</h1>
-          <p>
-            Price card lots, check out buys, track inventory, and measure profit
-            from one focused trading card workflow.
-          </p>
-          <div className="landing-actions">
-            <button
-              className="landing-primary"
-              type="button"
-              onClick={() => scrollToWorkspace("current")}
-            >
-              Launch app
-              <ArrowRight size={18} />
-            </button>
-            <button
-              className="landing-secondary"
-              type="button"
-              onClick={() => scrollToWorkspace("analytics")}
-            >
-              View analytics
-              <BarChart3 size={18} />
-            </button>
-          </div>
-          <div className="landing-proof" aria-label="Product highlights">
-            <span>Live price search</span>
-            <span>Supabase sync</span>
-            <span>Profit dashboard</span>
-          </div>
-        </div>
-      </AuroraBackground>
+      <LandingHero
+        visibleLandingCards={visibleLandingCards}
+        previousLandingCards={previousLandingCards}
+        previousLandingOffset={previousLandingOffset}
+        visibleLandingOffset={visibleLandingOffset}
+        onLaunch={() => scrollToWorkspace("current")}
+        onViewAnalytics={() => scrollToWorkspace("analytics")}
+      />
 
       <main className="app-shell" ref={workspaceRef}>
-      <header className="app-header">
-        <div>
-          <p className="eyebrow">Vendor buy tool</p>
-          <h1>OfferTCG</h1>
-          <p className="header-copy">
-            Search Pokemon cards, add the right version, and price a buy offer
-            at your target percentage.
-          </p>
-        </div>
-        <div className="header-side">
-          <div className="profile-menu" ref={profilePopoverRef}>
-            <button
-              aria-expanded={isProfileOpen}
-              aria-haspopup="dialog"
-              aria-label="Open account menu"
-              className="profile-button"
-              type="button"
-              onClick={() => setIsProfileOpen((current) => !current)}
-            >
-              <CircleUserRound size={23} />
-              {session ? <span className="profile-status" /> : null}
-            </button>
+        <AppHeader
+          totals={totals}
+          session={session}
+          supabaseEnabled={Boolean(supabaseClient)}
+          isProfileOpen={isProfileOpen}
+          profilePopoverRef={profilePopoverRef}
+          isAuthReady={isAuthReady}
+          isAuthSubmitting={isAuthSubmitting}
+          isCloudLoading={isCloudLoading}
+          cloudMessage={cloudMessage}
+          authEmail={authEmail}
+          authPassword={authPassword}
+          authMessage={authMessage}
+          onToggleProfile={() => setIsProfileOpen((current) => !current)}
+          onAuthEmailChange={setAuthEmail}
+          onAuthPasswordChange={setAuthPassword}
+          onAuthSubmit={(event) => void handleAuthSubmit(event)}
+          onSubmitAuth={(mode) => void submitAuth(mode)}
+          onSignOut={() => void signOut()}
+        />
 
-            {isProfileOpen ? (
-              <section
-                className="profile-popover"
-                role="dialog"
-                aria-label="Account sync"
-              >
-                <div>
-                  <p className="eyebrow">Account</p>
-                  {session ? (
-                    <strong>{session.user.email}</strong>
-                  ) : (
-                    <strong>{supabaseClient ? "Cloud sync" : "Local mode"}</strong>
-                  )}
-                </div>
+        <WorkspaceTabs
+          activeTab={activeTab}
+          recentBuysCount={recentBuys.length}
+          remainingQuantity={portfolioSummary.remainingQuantity}
+          portfolioCount={portfolioWorth.itemCount}
+          onChangeTab={(tab) => {
+            setActiveTab(tab);
+            if (tab === "nearby") {
+              void refreshPublicPortfolios();
+            }
+          }}
+        />
 
-                {!isAuthReady ? (
-                  <p className="auth-message">Checking account...</p>
-                ) : session ? (
-                  <div className="auth-row">
-                    <span>{isCloudLoading ? "Syncing..." : cloudMessage}</span>
-                    <button
-                      className="ghost-button"
-                      type="button"
-                      onClick={() => void signOut()}
-                      disabled={isAuthSubmitting}
-                    >
-                      <LogOut size={16} />
-                      Sign out
-                    </button>
-                  </div>
-                ) : supabaseClient ? (
-                  <form className="auth-form" onSubmit={handleAuthSubmit}>
-                    <input
-                      type="email"
-                      value={authEmail}
-                      onChange={(event) => setAuthEmail(event.target.value)}
-                      placeholder="Email"
-                      autoComplete="email"
-                    />
-                    <input
-                      type="password"
-                      value={authPassword}
-                      onChange={(event) => setAuthPassword(event.target.value)}
-                      placeholder="Password"
-                      autoComplete="current-password"
-                    />
-                    <div className="auth-actions">
-                      <button
-                        className="secondary-button"
-                        type="submit"
-                        disabled={isAuthSubmitting}
-                      >
-                        <LogIn size={16} />
-                        Log in
-                      </button>
-                      <button
-                        className="ghost-button"
-                        type="button"
-                        onClick={() => void submitAuth("signup")}
-                        disabled={isAuthSubmitting}
-                      >
-                        Sign up
-                      </button>
-                    </div>
-                  </form>
-                ) : (
-                  <p className="auth-message">
-                    Add Supabase env vars to enable account sync.
-                  </p>
-                )}
-
-                {authMessage ? (
-                  <p className="auth-message">{authMessage}</p>
-                ) : null}
-              </section>
-            ) : null}
-          </div>
-
-          <div className="summary-grid" aria-label="Current deal totals">
-            <SummaryMetric label="Market value" value={formatCurrency(totals.marketValue)} />
-            <SummaryMetric label="Suggested payout" value={formatCurrency(totals.payout)} strong />
-            <SummaryMetric label="Cards" value={totals.quantity.toString()} />
-          </div>
-        </div>
-      </header>
-
-      <nav className="tab-bar" aria-label="Workspace views">
-        <button
-          className={activeTab === "current" ? "active" : ""}
-          type="button"
-          onClick={() => setActiveTab("current")}
-        >
-          <ShoppingCart size={17} />
-          Current Deal
-        </button>
-        <button
-          className={activeTab === "recent" ? "active" : ""}
-          type="button"
-          onClick={() => setActiveTab("recent")}
-        >
-          <History size={17} />
-          Recent Buys
-          {recentBuys.length > 0 ? (
-            <span className="tab-count">{recentBuys.length}</span>
-          ) : null}
-        </button>
-        <button
-          className={activeTab === "analytics" ? "active" : ""}
-          type="button"
-          onClick={() => setActiveTab("analytics")}
-        >
-          <BarChart3 size={17} />
-          Analytics
-        </button>
-        <button
-          className={activeTab === "inventory" ? "active" : ""}
-          type="button"
-          onClick={() => setActiveTab("inventory")}
-        >
-          <Boxes size={17} />
-          Inventory
-          {portfolioSummary.remainingQuantity > 0 ? (
-            <span className="tab-count">
-              {portfolioSummary.remainingQuantity}
-            </span>
-          ) : null}
-        </button>
-      </nav>
-
-      {activeTab === "current" ? (
-        <>
-      <section className="search-panel">
-        <form className="search-form" onSubmit={handleSearch}>
-          <div className="search-main">
-            <label htmlFor="card-search">Card search</label>
-            <div className="search-input-wrap">
-              <Search aria-hidden="true" size={22} />
-              <input
-                id="card-search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Charizard ex, Pikachu, Umbreon VMAX..."
-                autoComplete="off"
-              />
-              {query ? (
-                <button
-                  aria-label="Clear search"
-                  className="icon-button"
-                  type="button"
-                  onClick={() => setQuery("")}
-                >
-                  <X size={18} />
-                </button>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="filter-grid">
-            <label>
-              Set name
-              <input
-                value={setName}
-                onChange={(event) => setSetName(event.target.value)}
-                placeholder="Obsidian Flames"
-              />
-            </label>
-            <label>
-              Card number
-              <input
-                value={cardNumber}
-                onChange={(event) => setCardNumber(event.target.value)}
-                placeholder="125/197"
-              />
-            </label>
-            <label>
-              Rarity
-              <input
-                value={rarity}
-                onChange={(event) => setRarity(event.target.value)}
-                placeholder="Special Illustration Rare"
-              />
-            </label>
-            <label>
-              Add condition
-              <select
-                value={addCondition}
-                onChange={(event) =>
-                  setAddCondition(event.target.value as CardCondition)
-                }
-              >
-                {CONDITIONS.map((condition) => (
-                  <option key={condition} value={condition}>
-                    {condition}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <button className="primary-button" type="submit" disabled={isSearching}>
-            {isSearching ? (
-              <Loader2 className="spin" size={18} />
-            ) : (
-              <Search size={18} />
-            )}
-            Search prices
-          </button>
-        </form>
-
-        <div className="search-options" aria-label="Search result options">
-          <label className="toggle-option">
-            <input
-              type="checkbox"
-              checked={pushNoMarketCardsDown}
-              onChange={(event) =>
-                setPushNoMarketCardsDown(event.target.checked)
-              }
-            />
-            <span>Push no-market cards down</span>
-          </label>
-        </div>
-
-        {searchError ? <p className="status-message error">{searchError}</p> : null}
-        {providerNotice ? (
-          <p className="status-message warning">{providerNotice}</p>
-        ) : null}
-      </section>
-
-      <section className="workspace-grid">
-        <section className="panel results-panel" aria-labelledby="results-heading">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">Search results</p>
-              <h2 id="results-heading">Select the exact card</h2>
-            </div>
-            <span className="count-pill">
-              {hasSearched ? pagination.totalCount : 0} results
-            </span>
-          </div>
-
-          {isSearching ? (
-            <div className="empty-state">
-              <Loader2 className="spin" size={24} />
-              <span>Looking up current prices...</span>
-            </div>
-          ) : null}
-
-          {!isSearching && hasSearched && results.length === 0 && !searchError ? (
-            <div className="empty-state">
-              <span>No matching cards found. Try a shorter name or clear filters.</span>
-            </div>
-          ) : null}
-
-          {!isSearching && !hasSearched ? (
-            <div className="empty-state">
-              <span>Search by card name to start a deal.</span>
-            </div>
-          ) : null}
-
-          <div className="result-list" ref={resultListRef}>
-            {displayedResults.map((card) => {
-              const selectedVariant = getSelectedVariant(
-                card,
-                selectedVariants[card.id]
-              );
-
-              return (
-                <article className="result-card" key={card.id}>
-                  <CardThumb card={card} />
-                  <div className="result-details">
-                    <div>
-                      <h3>{card.name}</h3>
-                      <p>
-                        {card.setName} #{card.cardNumber}
-                      </p>
-                      <p className="muted">
-                        {card.rarity} · Source: {sourceLabel(card.priceSource)}
-                      </p>
-                    </div>
-                    <div className="result-controls">
-                      <label>
-                        Version
-                        <select
-                          value={selectedVariant?.id ?? ""}
-                          onChange={(event) =>
-                            setSelectedVariants((current) => ({
-                              ...current,
-                              [card.id]: event.target.value
-                            }))
-                          }
-                        >
-                          {card.variants.map((variant) => (
-                            <option key={variant.id} value={variant.id}>
-                              {variant.label} ·{" "}
-                              {variant.marketPrice === null
-                                ? "No market"
-                                : formatCurrency(variant.marketPrice)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <div className="result-price">
-                        <span>Market</span>
-                        <strong>
-                          {selectedVariant?.marketPrice === null ||
-                          selectedVariant === undefined
-                            ? "Manual"
-                            : formatCurrency(selectedVariant.marketPrice)}
-                        </strong>
-                      </div>
-                      <button
-                        className="secondary-button"
-                        type="button"
-                        onClick={() => addCardToCart(card)}
-                      >
-                        <Plus size={17} />
-                        Add
-                      </button>
-                    </div>
-                    <div className="result-meta">
-                      <span>{formatPriceDate(card.lastUpdated)}</span>
-                      {card.externalUrl ? (
-                        <a href={card.externalUrl} target="_blank" rel="noreferrer">
-                          View source
-                        </a>
-                      ) : null}
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-
-          {hasPagedResults ? (
-            <div className="pagination-bar">
-              <span aria-live="polite">
-                Showing {resultStart}-{resultEnd} of {pagination.totalCount}
-              </span>
-              <div className="pagination-controls">
-                <button
-                  className="ghost-button"
-                  type="button"
-                  onClick={() => goToSearchPage(pagination.page - 1)}
-                  disabled={!canGoPrevious || isSearching}
-                >
-                  <ChevronLeft size={16} />
-                  Previous
-                </button>
-                <span>
-                  Page {pagination.page} of {totalPages}
-                </span>
-                <button
-                  className="ghost-button"
-                  type="button"
-                  onClick={() => goToSearchPage(pagination.page + 1)}
-                  disabled={!canGoNext || isSearching}
-                >
-                  Next
-                  <ChevronRight size={16} />
-                </button>
-              </div>
-            </div>
-          ) : null}
-        </section>
-
-        <section className="panel cart-panel" aria-labelledby="cart-heading">
-          <div className="panel-heading cart-heading">
-            <div>
-              <p className="eyebrow">Deal cart</p>
-              <h2 id="cart-heading">Suggested payout</h2>
-            </div>
-            <div className="cart-actions">
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={checkoutCart}
-                disabled={cart.length === 0}
-              >
-                <CheckCircle size={17} />
-                Checkout
-              </button>
-              <button
-                className="ghost-button"
-                type="button"
-                onClick={exportCsv}
-                disabled={cart.length === 0}
-              >
-                <Download size={17} />
-                CSV
-              </button>
-              <button
-                className="ghost-button danger"
-                type="button"
-                onClick={clearCart}
-                disabled={cart.length === 0}
-              >
-                <Trash2 size={17} />
-                Clear
-              </button>
-            </div>
-          </div>
-
-          <div className="percent-toolbar" aria-label="Buy percentage controls">
-            <label>
-              Global buy %
-              <input
-                className="percent-input"
-                type="number"
-                min="1"
-                max="100"
-                step="1"
-                value={globalBuyPercent}
-                onChange={(event) =>
-                  applyGlobalPercent(Number(event.target.value))
-                }
-              />
-            </label>
-            <div className="quick-buttons">
-              {QUICK_PERCENTAGES.map((percent) => (
-                <button
-                  className={percent === globalBuyPercent ? "active" : ""}
-                  key={percent}
-                  type="button"
-                  onClick={() => applyGlobalPercent(percent)}
-                >
-                  {percent}%
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Card</th>
-                  <th>Condition</th>
-                  <th>Market</th>
-                  <th>Buy %</th>
-                  <th>Qty</th>
-                  <th>Each</th>
-                  <th>Total</th>
-                  <th aria-label="Actions" />
-                </tr>
-              </thead>
-              <tbody>
-                {cart.length === 0 ? (
-                  <tr>
-                    <td className="empty-row" colSpan={8}>
-                      Add cards from search results to price a deal.
-                    </td>
-                  </tr>
-                ) : null}
-                {cart.map((item) => (
-                  <tr key={item.id}>
-                    <td className="deal-card-cell">
-                      <CardThumb card={item} compact />
-                      <div>
-                        <strong>{item.name}</strong>
-                        <span>
-                          {item.setName} #{item.cardNumber}
-                        </span>
-                        <span className="muted">
-                          {item.variantLabel} · {item.rarity}
-                        </span>
-                        <input
-                          className="notes-input"
-                          value={item.notes}
-                          onChange={(event) =>
-                            updateCartItem(item.id, (current) => ({
-                              ...current,
-                              notes: event.target.value
-                            }))
-                          }
-                          placeholder="Notes"
-                        />
-                      </div>
-                    </td>
-                    <td>
-                      <select
-                        value={item.condition}
-                        onChange={(event) =>
-                          updateCartItem(item.id, (current) => ({
-                            ...current,
-                            condition: event.target.value as CardCondition
-                          }))
-                        }
-                      >
-                        {CONDITIONS.map((condition) => (
-                          <option key={condition} value={condition}>
-                            {condition}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>
-                      <div className="price-stack">
-                        <strong>{formatCurrency(effectiveMarketPrice(item))}</strong>
-                        <span>
-                          {item.marketPriceMissing
-                            ? "No market"
-                            : `Market ${formatCurrency(item.marketPrice)}`}
-                        </span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={item.manualMarketPrice ?? ""}
-                          onChange={(event) =>
-                            updateCartItem(item.id, (current) => ({
-                              ...current,
-                              manualMarketPrice:
-                                event.target.value === ""
-                                  ? undefined
-                                  : roundCurrency(Number(event.target.value))
-                            }))
-                          }
-                          placeholder="Override"
-                        />
-                      </div>
-                    </td>
-                    <td>
-                      <input
-                        className="small-number"
-                        type="number"
-                        min="1"
-                        max="100"
-                        step="1"
-                        value={item.buyPercent}
-                        onChange={(event) =>
-                          updateCartItem(item.id, (current) => ({
-                            ...current,
-                            buyPercent: clampPercent(Number(event.target.value))
-                          }))
-                        }
-                      />
-                    </td>
-                    <td>
-                      <input
-                        className="small-number"
-                        type="number"
-                        min="1"
-                        step="1"
-                        value={item.quantity}
-                        onChange={(event) =>
-                          updateCartItem(item.id, (current) => ({
-                            ...current,
-                            quantity: Math.max(1, Math.floor(Number(event.target.value) || 1))
-                          }))
-                        }
-                      />
-                    </td>
-                    <td>{formatCurrency(suggestedBuyPrice(item))}</td>
-                    <td>
-                      <strong>{formatCurrency(totalPayout(item))}</strong>
-                    </td>
-                    <td>
-                      <button
-                        aria-label={`Remove ${item.name}`}
-                        className="icon-button danger"
-                        type="button"
-                        onClick={() => removeCartItem(item.id)}
-                      >
-                        <Trash2 size={17} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td colSpan={4}>Totals</td>
-                  <td>{totals.quantity}</td>
-                  <td>{formatCurrency(totals.marketValue)}</td>
-                  <td>{formatCurrency(totals.payout)}</td>
-                  <td />
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-
-          {cart.length > 0 ? (
-            <button
-              className="reset-button"
-              type="button"
-              onClick={() => applyGlobalPercent(DEFAULT_BUY_PERCENT)}
-            >
-              <RotateCcw size={16} />
-              Reset all cards to {DEFAULT_BUY_PERCENT}%
-            </button>
-          ) : null}
-        </section>
-      </section>
-        </>
-      ) : activeTab === "recent" ? (
-        <section className="recent-buys-view">
-          <div className="summary-grid recent-summary" aria-label="Recent buy totals">
-            <SummaryMetric
-              label="Total buy cost"
-              value={formatCurrency(portfolioSummary.buyCost)}
-            />
-            <SummaryMetric
-              label="Sold revenue"
-              value={formatCurrency(portfolioSummary.soldRevenue)}
-            />
-            <SummaryMetric
-              label="Gross profit"
-              value={formatCurrency(portfolioSummary.realizedProfit)}
-              strong
-            />
-          </div>
-
-          {recentBuys.length > 0 ? (
-            <div className="history-toolbar">
-              <label>
-                Search lots
-                <input
-                  value={lotHistoryQuery}
-                  onChange={(event) => setLotHistoryQuery(event.target.value)}
-                  placeholder="Lot, card, set, condition..."
-                />
-              </label>
-              <label>
-                Sort by
-                <select
-                  value={lotHistorySort}
-                  onChange={(event) =>
-                    setLotHistorySort(event.target.value as LotHistorySort)
-                  }
-                >
-                  {LOT_HISTORY_SORT_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="history-filters" aria-label="Lot history filter">
-                {LOT_HISTORY_FILTER_OPTIONS.map((option) => (
-                  <button
-                    className={
-                      lotHistoryFilter === option.value ? "active" : ""
-                    }
-                    key={option.value}
-                    type="button"
-                    onClick={() => setLotHistoryFilter(option.value)}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {recentBuys.length === 0 ? (
-            <section className="panel">
-              <div className="empty-state">
-                <span>Checkout a deal cart to start tracking recent buys.</span>
-              </div>
-            </section>
-          ) : visibleLots.length === 0 ? (
-            <section className="panel">
-              <div className="empty-state">
-                <span>No lots match the current history filters.</span>
-              </div>
-            </section>
-          ) : (
-            <section className="recent-grid">
-              <aside className="panel lot-list-panel" aria-label="Recent buy lots">
-                <div className="panel-heading">
-                  <div>
-                    <p className="eyebrow">Recent buys</p>
-                    <h2>Lots</h2>
-                  </div>
-                </div>
-                <div className="lot-list">
-                  {visibleLots.map((lot) => {
-                    const totals = lotTotals(lot);
-                    const lotNet = lotNetProfit(lot);
-                    const badges = lotStatusBadges(lot);
-
-                    return (
-                      <button
-                        className={
-                          historySelectedLot?.id === lot.id
-                            ? "lot-list-item active"
-                            : "lot-list-item"
-                        }
-                        key={lot.id}
-                        type="button"
-                        onClick={() => setSelectedLotId(lot.id)}
-                      >
-                        <span>
-                          <strong>{lot.label}</strong>
-                          <small>{formatDateTime(lot.checkedOutAt)}</small>
-                        </span>
-                        <span className="status-badges">
-                          {badges.map((badge) => (
-                            <span
-                              className={`status-badge ${badge.tone}`}
-                              key={badge.label}
-                            >
-                              {badge.label}
-                            </span>
-                          ))}
-                        </span>
-                        <span>
-                          {totals.remainingQuantity} left ·{" "}
-                          {formatCurrency(lotNet)} net ·{" "}
-                          {formatPercent(roiPercent(lotNet, totals.buyCost))}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </aside>
-
-              {historySelectedLot && historySelectedLotTotals ? (
-                <section className="panel lot-detail-panel">
-                  <div className="panel-heading lot-detail-heading">
-                    <div className="lot-detail-title">
-                      {editingLotId === historySelectedLot.id ? (
-                        <form
-                          className="lot-rename-form"
-                          onSubmit={(event) =>
-                            void saveLotRename(event, historySelectedLot.id)
-                          }
-                        >
-                          <p className="eyebrow">Lot detail</p>
-                          <label htmlFor={`lot-name-${historySelectedLot.id}`}>
-                            Lot name
-                          </label>
-                          <div className="lot-rename-controls">
-                            <input
-                              id={`lot-name-${historySelectedLot.id}`}
-                              maxLength={MAX_LOT_LABEL_LENGTH}
-                              value={lotNameDraft}
-                              onChange={(event) => {
-                                setLotNameDraft(event.target.value);
-                                setLotRenameError("");
-                              }}
-                              autoFocus
-                              disabled={isRenamingLot}
-                            />
-                            <button
-                              className="secondary-button"
-                              type="submit"
-                              disabled={
-                                isRenamingLot || lotNameDraft.trim().length === 0
-                              }
-                            >
-                              <CheckCircle size={17} />
-                              Save
-                            </button>
-                            <button
-                              className="ghost-button"
-                              type="button"
-                              onClick={cancelRenamingLot}
-                              disabled={isRenamingLot}
-                            >
-                              <X size={17} />
-                              Cancel
-                            </button>
-                          </div>
-                          {lotRenameError ? (
-                            <p className="input-error">{lotRenameError}</p>
-                          ) : null}
-                          <p className="muted">
-                            Checked out{" "}
-                            {formatDateTime(historySelectedLot.checkedOutAt)}
-                          </p>
-                        </form>
-                      ) : (
-                        <div>
-                          <p className="eyebrow">Lot detail</p>
-                          <h2>{historySelectedLot.label}</h2>
-                          <p className="muted">
-                            Checked out{" "}
-                            {formatDateTime(historySelectedLot.checkedOutAt)}
-                          </p>
-                        </div>
-                      )}
-                      {editingLotId === historySelectedLot.id ? null : (
-                        <div className="lot-title-actions">
-                          <button
-                            className="ghost-button"
-                            type="button"
-                            onClick={() => startRenamingLot(historySelectedLot)}
-                          >
-                            <Pencil size={17} />
-                            Rename
-                          </button>
-                          <button
-                            className="ghost-button danger"
-                            type="button"
-                            onClick={() => void deleteLot(historySelectedLot.id)}
-                          >
-                            <Trash2 size={17} />
-                            Delete lot
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                    <div className="lot-metrics" aria-label="Selected lot totals">
-                      <SummaryMetric
-                        label="Buy cost"
-                        value={formatCurrency(historySelectedLotTotals.buyCost)}
-                      />
-                      <SummaryMetric
-                        label="Sold"
-                        value={formatCurrency(
-                          historySelectedLotTotals.soldRevenue
-                        )}
-                      />
-                      <SummaryMetric
-                        label="Lot net"
-                        value={formatCurrency(lotNetProfit(historySelectedLot))}
-                        strong
-                      />
-                      <SummaryMetric
-                        label="Sold profit"
-                        value={formatCurrency(
-                          historySelectedLotTotals.grossProfit
-                        )}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="lot-items">
-                    {historySelectedLot.items.map((item) => {
-                      const key = saleDraftKey(historySelectedLot.id, item.id);
-                      const draft = saleDrafts[key] ?? {
-                        quantity: "",
-                        saleTotal: ""
-                      };
-                      const remaining = remainingQuantity(item);
-                      const draftQuantity = Number(draft.quantity);
-                      const draftSaleTotal = Number(draft.saleTotal);
-                      const canRecordSale =
-                        remaining > 0 &&
-                        Number.isFinite(draftQuantity) &&
-                        draftQuantity >= 1 &&
-                        Number.isFinite(draftSaleTotal) &&
-                        draftSaleTotal > 0;
-
-                      return (
-                        <article className="lot-item" key={item.id}>
-                          <div className="lot-item-main">
-                            <CardThumb card={item} compact />
-                            <div>
-                              <h3>{item.name}</h3>
-                              <p>
-                                {item.setName} #{item.cardNumber}
-                              </p>
-                              <p className="muted">
-                                {item.variantLabel} · {item.condition}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="lot-item-stats">
-                            <MetricStack label="Bought" value={item.quantity.toString()} />
-                            <MetricStack
-                              label="Remaining"
-                              value={remaining.toString()}
-                            />
-                            <MetricStack
-                              label="Buy cost"
-                              value={formatCurrency(item.buyTotal)}
-                            />
-                            <MetricStack
-                              label="Sold"
-                              value={formatCurrency(soldRevenue(item))}
-                            />
-                            <MetricStack
-                              label="Sold profit"
-                              value={formatCurrency(grossProfit(item))}
-                            />
-                          </div>
-
-                          <div className="sale-form" aria-label={`Mark ${item.name} sold`}>
-                            <label>
-                              Qty sold
-                              <input
-                                type="number"
-                                min="1"
-                                max={remaining}
-                                step="1"
-                                value={draft.quantity}
-                                onChange={(event) =>
-                                  updateSaleDraft(key, {
-                                    ...draft,
-                                    quantity: clampQuantityInput(
-                                      event.target.value,
-                                      remaining
-                                    )
-                                  })
-                                }
-                                disabled={remaining === 0}
-                              />
-                            </label>
-                            <label>
-                              Sale total
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={draft.saleTotal}
-                                onChange={(event) =>
-                                  updateSaleDraft(key, {
-                                    ...draft,
-                                    saleTotal: event.target.value
-                                  })
-                                }
-                                placeholder="0.00"
-                                disabled={remaining === 0}
-                              />
-                            </label>
-                            <button
-                              className="secondary-button"
-                              type="button"
-                              onClick={() =>
-                                markItemSold(historySelectedLot.id, item.id)
-                              }
-                              disabled={!canRecordSale}
-                            >
-                              <CheckCircle size={17} />
-                              Mark sold
-                            </button>
-                          </div>
-                        </article>
-                      );
-                    })}
-                  </div>
-                </section>
-              ) : null}
-            </section>
-          )}
-        </section>
-      ) : activeTab === "analytics" ? (
-        <section className="analytics-view">
-          {recentBuys.length === 0 ? (
-            <section className="panel">
-              <div className="empty-state">
-                <span>Checkout a deal cart to unlock portfolio analytics.</span>
-              </div>
-            </section>
-          ) : (
-            <>
-              <div className="analytics-summary" aria-label="Portfolio analytics">
-                <SummaryMetric
-                  label="Total spent"
-                  value={formatCurrency(portfolioSummary.buyCost)}
-                />
-                <SummaryMetric
-                  label="Sold revenue"
-                  value={formatCurrency(portfolioSummary.soldRevenue)}
-                />
-                <SummaryMetric
-                  label="Realized profit"
-                  value={formatCurrency(portfolioSummary.realizedProfit)}
-                  strong
-                />
-                <SummaryMetric
-                  label="Lot net"
-                  value={formatCurrency(portfolioSummary.lotNet)}
-                />
-                <SummaryMetric
-                  label="Realized ROI"
-                  value={formatPercent(portfolioSummary.realizedRoi)}
-                />
-                <SummaryMetric
-                  label="Sell-through"
-                  value={formatPercent(portfolioSummary.sellThroughRate)}
-                />
-                <SummaryMetric
-                  label="Inventory value"
-                  value={formatCurrency(portfolioSummary.remainingMarketValue)}
-                />
-                <SummaryMetric
-                  label="Inventory spread"
-                  value={formatCurrency(portfolioSummary.remainingSpread)}
-                />
-              </div>
-
-              <section className="analytics-grid">
-                <section className="panel analytics-panel">
-                  <div className="panel-heading">
-                    <div>
-                      <p className="eyebrow">Trend</p>
-                      <h2>Monthly profit</h2>
-                    </div>
-                    <span className="count-pill">{monthlyProfit.length} months</span>
-                  </div>
-
-                  {monthlyProfit.length === 0 ? (
-                    <div className="empty-state compact">
-                      <span>Record a sale to start the monthly profit chart.</span>
-                    </div>
-                  ) : (
-                    <div className="profit-bars">
-                      {monthlyProfit.slice(-8).map((month) => {
-                        const width = Math.max(
-                          4,
-                          (Math.abs(month.profit) / maxMonthlyProfit) * 100
-                        );
-
-                        return (
-                          <div className="profit-bar-row" key={month.key}>
-                            <span>{month.label}</span>
-                            <div className="profit-bar-track">
-                              <span
-                                className={
-                                  month.profit >= 0
-                                    ? "profit-bar positive"
-                                    : "profit-bar negative"
-                                }
-                                style={{ width: `${width}%` }}
-                              />
-                            </div>
-                            <strong>{formatCurrency(month.profit)}</strong>
-                            <small>
-                              {month.quantity} sold ·{" "}
-                              {formatCurrency(month.revenue)}
-                            </small>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </section>
-
-                <section className="panel analytics-panel">
-                  <div className="panel-heading">
-                    <div>
-                      <p className="eyebrow">Lots</p>
-                      <h2>Performance</h2>
-                    </div>
-                  </div>
-                  <div className="performance-grid">
-                    <LotPerformanceCard
-                      title="Best lot"
-                      performance={lotPerformance[0]}
-                      onViewLot={viewLot}
-                    />
-                    <LotPerformanceCard
-                      title="Weakest lot"
-                      performance={lotPerformance[lotPerformance.length - 1]}
-                      onViewLot={viewLot}
-                    />
-                  </div>
-                </section>
-              </section>
-            </>
-          )}
-        </section>
-      ) : (
-        <section className="inventory-view">
-          <section className="panel inventory-panel">
-            <div className="panel-heading inventory-heading">
-              <div>
-                <p className="eyebrow">Inventory</p>
-                <h2>Cards on hand</h2>
-              </div>
-              <span className="count-pill">{inventoryRows.length} rows</span>
-            </div>
-
-            <div className="inventory-toolbar">
-              <label>
-                Search inventory
-                <input
-                  value={inventoryQuery}
-                  onChange={(event) => setInventoryQuery(event.target.value)}
-                  placeholder="Card, set, lot, condition..."
-                />
-              </label>
-              <label>
-                Sort by
-                <select
-                  value={inventorySort}
-                  onChange={(event) =>
-                    setInventorySort(event.target.value as InventorySort)
-                  }
-                >
-                  <option value="value">Market value</option>
-                  <option value="cost">Remaining cost</option>
-                  <option value="spread">Potential spread</option>
-                  <option value="newest">Newest lot</option>
-                  <option value="name">Card name</option>
-                </select>
-              </label>
-              <div className="segmented-control" aria-label="Inventory mode">
-                <button
-                  className={inventoryMode === "unsold" ? "active" : ""}
-                  type="button"
-                  onClick={() => setInventoryMode("unsold")}
-                >
-                  Unsold
-                </button>
-                <button
-                  className={inventoryMode === "all" ? "active" : ""}
-                  type="button"
-                  onClick={() => setInventoryMode("all")}
-                >
-                  All
-                </button>
-              </div>
-            </div>
-
-            {recentBuys.length === 0 ? (
-              <div className="empty-state">
-                <span>Checkout a deal cart to start building inventory.</span>
-              </div>
-            ) : inventoryRows.length === 0 ? (
-              <div className="empty-state">
-                <span>No inventory rows match the current filters.</span>
-              </div>
-            ) : (
-              <div className="table-wrap">
-                <table className="inventory-table">
-                  <thead>
-                    <tr>
-                      <th>Card</th>
-                      <th>Lot</th>
-                      <th>Bought / Left</th>
-                      <th>Remaining cost</th>
-                      <th>Market value</th>
-                      <th>Spread</th>
-                      <th aria-label="Actions" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {inventoryRows.map((row) => (
-                      <tr key={row.id}>
-                        <td className="deal-card-cell">
-                          <CardThumb card={row.item} compact />
-                          <div>
-                            <strong>{row.item.name}</strong>
-                            <span>
-                              {row.item.setName} #{row.item.cardNumber}
-                            </span>
-                            <span className="muted">
-                              {row.item.variantLabel} · {row.item.condition}
-                            </span>
-                          </div>
-                        </td>
-                        <td>
-                          <div className="price-stack">
-                            <strong>{row.lotLabel}</strong>
-                            <span>{formatDateTime(row.checkedOutAt)}</span>
-                          </div>
-                        </td>
-                        <td>
-                          {row.item.quantity} / <strong>{row.remaining}</strong>
-                        </td>
-                        <td>{formatCurrency(row.buyCost)}</td>
-                        <td>{formatCurrency(row.marketValue)}</td>
-                        <td>
-                          <strong
-                            className={
-                              row.spread >= 0 ? "positive-value" : "negative-value"
-                            }
-                          >
-                            {formatCurrency(row.spread)}
-                          </strong>
-                        </td>
-                        <td>
-                          <button
-                            className="ghost-button"
-                            type="button"
-                            onClick={() => viewLot(row.lotId)}
-                          >
-                            View lot
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-        </section>
-      )}
+        {activeTab === "current" ? (
+          <CurrentDealView
+            query={query}
+            setName={setName}
+            cardNumber={cardNumber}
+            rarity={rarity}
+            addCondition={addCondition}
+            pushNoMarketCardsDown={pushNoMarketCardsDown}
+            searchError={searchError}
+            providerNotice={providerNotice}
+            isSearching={isSearching}
+            hasSearched={hasSearched}
+            pagination={pagination}
+            displayedResults={displayedResults}
+            selectedVariants={selectedVariants}
+            totalPages={totalPages}
+            hasPagedResults={hasPagedResults}
+            resultStart={resultStart}
+            resultEnd={resultEnd}
+            canGoPrevious={canGoPrevious}
+            canGoNext={canGoNext}
+            resultListRef={resultListRef}
+            cart={cart}
+            totals={totals}
+            globalBuyPercent={globalBuyPercent}
+            onQueryChange={setQuery}
+            onSetNameChange={setSetName}
+            onCardNumberChange={setCardNumber}
+            onRarityChange={setRarity}
+            onAddConditionChange={setAddCondition}
+            onPushNoMarketCardsDownChange={setPushNoMarketCardsDown}
+            onSearch={(event) => void handleSearch(event)}
+            onSelectedVariantsChange={setSelectedVariants}
+            onAddCard={addCardToCart}
+            onGoToSearchPage={goToSearchPage}
+            onCheckoutCart={checkoutCart}
+            onExportCsv={exportCsv}
+            onClearCart={clearCart}
+            onApplyGlobalPercent={applyGlobalPercent}
+            onUpdateCartItem={updateCartItem}
+            onRemoveCartItem={removeCartItem}
+          />
+        ) : activeTab === "portfolio" ? (
+          <PortfolioView
+            sessionActive={Boolean(session)}
+            profile={portfolioProfile}
+            profileMessage={portfolioMessage}
+            cityQuery={cityQuery}
+            cityResults={cityResults}
+            cityMessage={cityMessage}
+            isCitySearching={isCitySearching}
+            portfolioItems={portfolioItems}
+            portfolioWorth={portfolioWorth}
+            searchQuery={portfolioSearchQuery}
+            searchSetName={portfolioSearchSetName}
+            searchCardNumber={portfolioSearchCardNumber}
+            searchError={portfolioSearchError}
+            providerNotice={portfolioProviderNotice}
+            isSearching={isPortfolioSearching}
+            hasSearched={hasPortfolioSearched}
+            pagination={portfolioSearchPagination}
+            searchResults={portfolioSearchResults}
+            selectedVariants={portfolioSelectedVariants}
+            ownershipType={portfolioOwnershipType}
+            addCondition={portfolioAddCondition}
+            addGrader={portfolioAddGrader}
+            addGrade={portfolioAddGrade}
+            addQuantity={portfolioAddQuantity}
+            addCertNumber={portfolioAddCertNumber}
+            addNotes={portfolioAddNotes}
+            addItemPublic={portfolioAddItemPublic}
+            refreshingItemId={refreshingPortfolioItemId}
+            onProfileChange={setPortfolioProfile}
+            onSaveProfile={() => void savePortfolioProfile()}
+            onCityQueryChange={setCityQuery}
+            onSearchCities={(event) => void handleCitySearch(event)}
+            onSelectCity={selectPortfolioCity}
+            onClearCity={clearPortfolioCity}
+            onSearchQueryChange={setPortfolioSearchQuery}
+            onSearchSetNameChange={setPortfolioSearchSetName}
+            onSearchCardNumberChange={setPortfolioSearchCardNumber}
+            onSearch={(event) => void handlePortfolioSearch(event)}
+            onSelectedVariantsChange={setPortfolioSelectedVariants}
+            onOwnershipTypeChange={setPortfolioOwnershipType}
+            onAddConditionChange={(value) =>
+              setPortfolioAddCondition(value ?? "Near Mint")
+            }
+            onAddGraderChange={setPortfolioAddGrader}
+            onAddGradeChange={setPortfolioAddGrade}
+            onAddQuantityChange={setPortfolioAddQuantity}
+            onAddCertNumberChange={setPortfolioAddCertNumber}
+            onAddNotesChange={setPortfolioAddNotes}
+            onAddItemPublicChange={setPortfolioAddItemPublic}
+            onAddCard={addCardToPortfolio}
+            onRefreshItemPrice={(item) => void refreshPortfolioItemPrice(item)}
+            onDeleteItem={(itemId) => void deletePortfolioItem(itemId)}
+            onUpdateItem={updatePortfolioItem}
+          />
+        ) : activeTab === "nearby" ? (
+          <NearbyView
+            sessionActive={Boolean(session)}
+            profile={portfolioProfile}
+            publicPins={publicPortfolioPins}
+            isLoading={isNearbyLoading}
+            message={nearbyMessage}
+            cardQuery={nearbyCardQuery}
+            maxDistanceMiles={nearbyMaxDistance}
+            nearbySort={nearbySort}
+            mapboxToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN?.trim() ?? ""}
+            onCardQueryChange={setNearbyCardQuery}
+            onMaxDistanceChange={setNearbyMaxDistance}
+            onNearbySortChange={setNearbySort}
+            onRefresh={() => void refreshPublicPortfolios()}
+          />
+        ) : activeTab === "recent" ? (
+          <RecentBuysView
+            recentBuys={recentBuys}
+            portfolioSummary={portfolioSummary}
+            visibleLots={visibleLots}
+            historySelectedLot={historySelectedLot}
+            historySelectedLotTotals={historySelectedLotTotals}
+            saleDrafts={saleDrafts}
+            editingLotId={editingLotId}
+            lotNameDraft={lotNameDraft}
+            lotRenameError={lotRenameError}
+            isRenamingLot={isRenamingLot}
+            lotHistoryQuery={lotHistoryQuery}
+            lotHistoryFilter={lotHistoryFilter}
+            lotHistorySort={lotHistorySort}
+            onLotHistoryQueryChange={setLotHistoryQuery}
+            onLotHistoryFilterChange={setLotHistoryFilter}
+            onLotHistorySortChange={setLotHistorySort}
+            onSelectLot={setSelectedLotId}
+            onStartRenamingLot={startRenamingLot}
+            onCancelRenamingLot={cancelRenamingLot}
+            onSaveLotRename={(event, lotId) => void saveLotRename(event, lotId)}
+            onLotNameDraftChange={(value) => {
+              setLotNameDraft(value);
+              setLotRenameError("");
+            }}
+            onDeleteLot={(lotId) => void deleteLot(lotId)}
+            onUpdateSaleDraft={updateSaleDraft}
+            onMarkItemSold={markItemSold}
+          />
+        ) : activeTab === "analytics" ? (
+          <AnalyticsView
+            recentBuys={recentBuys}
+            portfolioSummary={portfolioSummary}
+            monthlyProfit={monthlyProfit}
+            maxMonthlyProfit={maxMonthlyProfit}
+            lotPerformance={lotPerformance}
+            onViewLot={viewLot}
+          />
+        ) : (
+          <InventoryView
+            recentBuys={recentBuys}
+            inventoryRows={inventoryRows}
+            inventoryQuery={inventoryQuery}
+            inventoryMode={inventoryMode}
+            inventorySort={inventorySort}
+            onInventoryQueryChange={setInventoryQuery}
+            onInventoryModeChange={setInventoryMode}
+            onInventorySortChange={setInventorySort}
+            onViewLot={viewLot}
+          />
+        )}
       </main>
     </>
   );
-}
-
-function landingCardsForOffset(offset: number) {
-  return Array.from({ length: 4 }, (_unused, index) => {
-    return LANDING_CARDS[(offset + index) % LANDING_CARDS.length];
-  });
-}
-
-function LandingCard({
-  card,
-  index,
-  priority = false
-}: {
-  card: (typeof LANDING_CARDS)[number];
-  index: number;
-  priority?: boolean;
-}) {
-  return (
-    <div className={`floating-card card-${index + 1}`}>
-      <Image
-        src={card.imageUrl}
-        alt=""
-        width={220}
-        height={307}
-        priority={priority}
-      />
-      <span>
-        {card.name}
-        <small>{card.meta}</small>
-      </span>
-    </div>
-  );
-}
-
-function SummaryMetric({
-  label,
-  value,
-  strong = false
-}: {
-  label: string;
-  value: string;
-  strong?: boolean;
-}) {
-  return (
-    <div className={strong ? "summary-card strong" : "summary-card"}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-function MetricStack({
-  label,
-  value
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="metric-stack">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-function LotPerformanceCard({
-  title,
-  performance,
-  onViewLot
-}: {
-  title: string;
-  performance?: LotPerformance;
-  onViewLot: (lotId: string) => void;
-}) {
-  if (!performance) {
-    return null;
-  }
-
-  return (
-    <article className="performance-card">
-      <div>
-        <span>{title}</span>
-        <h3>{performance.lot.label}</h3>
-        <p>{formatDateTime(performance.lot.checkedOutAt)}</p>
-      </div>
-      <div className="performance-metrics">
-        <MetricStack label="Lot net" value={formatCurrency(performance.lotNet)} />
-        <MetricStack
-          label="Realized"
-          value={formatCurrency(performance.totals.grossProfit)}
-        />
-        <MetricStack label="ROI" value={formatPercent(performance.portfolioRoi)} />
-        <MetricStack
-          label="Left"
-          value={performance.totals.remainingQuantity.toString()}
-        />
-      </div>
-      <button
-        className="ghost-button"
-        type="button"
-        onClick={() => onViewLot(performance.lot.id)}
-      >
-        View lot
-      </button>
-    </article>
-  );
-}
-
-function lotStatusBadges(lot: DealLot): LotStatusBadge[] {
-  const totals = lotTotals(lot);
-  const lotNet = lotNetProfit(lot);
-  const badges: LotStatusBadge[] = [
-    totals.remainingQuantity === 0
-      ? { label: "Sold out", tone: "sold" }
-      : { label: "Open", tone: "open" }
-  ];
-
-  if (lotNet > 0) {
-    badges.push({ label: "Profit", tone: "profit" });
-  } else if (
-    lotNet < 0 &&
-    (totals.soldRevenue > 0 || totals.remainingQuantity === 0)
-  ) {
-    badges.push({ label: "Loss", tone: "loss" });
-  } else if (totals.soldRevenue > 0) {
-    badges.push({ label: "Break even", tone: "neutral" });
-  }
-
-  return badges;
-}
-
-function readStoredDeal(): StoredDeal {
-  const rawDeal = window.localStorage.getItem(STORAGE_KEY);
-  if (!rawDeal) {
-    return {};
-  }
-
-  try {
-    return JSON.parse(rawDeal) as StoredDeal;
-  } catch {
-    window.localStorage.removeItem(STORAGE_KEY);
-    return {};
-  }
-}
-
-function readStoredRecentBuys(): DealLot[] {
-  const rawRecentBuys = window.localStorage.getItem(RECENT_BUYS_STORAGE_KEY);
-  if (!rawRecentBuys) {
-    return [];
-  }
-
-  try {
-    const parsedRecentBuys = JSON.parse(rawRecentBuys) as unknown;
-    return Array.isArray(parsedRecentBuys)
-      ? (parsedRecentBuys as DealLot[])
-      : [];
-  } catch {
-    window.localStorage.removeItem(RECENT_BUYS_STORAGE_KEY);
-    return [];
-  }
-}
-
-function clearLocalDealStorage() {
-  window.localStorage.removeItem(STORAGE_KEY);
-  window.localStorage.removeItem(RECENT_BUYS_STORAGE_KEY);
-}
-
-function CardThumb({
-  card,
-  compact = false
-}: {
-  card: Pick<CardSearchResult, "name" | "imageUrl"> | Pick<DealItem, "name" | "imageUrl">;
-  compact?: boolean;
-}) {
-  const sizeClass = compact ? "card-thumb compact" : "card-thumb";
-
-  if (!card.imageUrl) {
-    return <div className={`${sizeClass} placeholder`}>{card.name.slice(0, 2)}</div>;
-  }
-
-  return (
-    <Image
-      className={sizeClass}
-      src={card.imageUrl}
-      alt={`${card.name} card image`}
-      width={compact ? 42 : 72}
-      height={compact ? 58 : 100}
-    />
-  );
-}
-
-function createDealLotItem(item: DealItem): DealLotItem {
-  const buyUnitPrice = suggestedBuyPrice(item);
-
-  return {
-    ...item,
-    buyUnitPrice,
-    buyTotal: roundCurrency(buyUnitPrice * item.quantity),
-    soldQuantity: 0,
-    sales: []
-  };
-}
-
-function getSelectedVariant(card: CardSearchResult, selectedId?: string) {
-  return (
-    card.variants.find((variant) => variant.id === selectedId) ??
-    card.variants[0]
-  );
-}
-
-function sortCardsByMarketAvailability(cards: CardSearchResult[]) {
-  return cards
-    .map((card, index) => ({ card, index }))
-    .sort((left, right) => {
-      const priceRank =
-        Number(hasCardMarketPrice(right.card)) -
-        Number(hasCardMarketPrice(left.card));
-
-      return priceRank === 0 ? left.index - right.index : priceRank;
-    })
-    .map(({ card }) => card);
-}
-
-function hasCardMarketPrice(card: CardSearchResult) {
-  return card.variants.some((variant) => variant.marketPrice !== null);
-}
-
-function saleDraftKey(lotId: string, itemId: string) {
-  return `${lotId}|${itemId}`;
-}
-
-function toSearchFilters(
-  query: string,
-  setName: string,
-  cardNumber: string,
-  rarity: string
-): SearchFilters {
-  return {
-    query: query.trim(),
-    setName: setName.trim(),
-    cardNumber: cardNumber.trim(),
-    rarity: rarity.trim()
-  };
-}
-
-function appendOptionalParam(
-  params: URLSearchParams,
-  key: string,
-  value: string
-) {
-  const trimmed = value.trim();
-  if (trimmed) {
-    params.set(key, trimmed);
-  }
-}
-
-function formatCurrency(value: number) {
-  return currencyFormatter.format(roundCurrency(value));
-}
-
-function formatPercent(value: number) {
-  return `${percentFormatter.format(roundCurrency(value))}%`;
-}
-
-function formatDate(value: string) {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-
-  return parsed.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric"
-  });
-}
-
-function formatPriceDate(value: string) {
-  if (!value.trim()) {
-    return "Price date unavailable";
-  }
-
-  return `Updated ${formatDate(value)}`;
-}
-
-function formatDateTime(value: string) {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-
-  return parsed.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit"
-  });
-}
-
-function sourceLabel(source: CardSearchResult["priceSource"]) {
-  if (source === "pokemon-tcg-api") {
-    return "Pokemon TCG API";
-  }
-
-  if (source === "tcgplayer") {
-    return "TCGplayer";
-  }
-
-  return "Mock";
-}
-
-function isValidPercent(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && value > 0;
-}
-
-function clampPercent(value: number) {
-  if (!Number.isFinite(value)) {
-    return DEFAULT_BUY_PERCENT;
-  }
-
-  return Math.min(100, Math.max(1, Math.round(value)));
-}
-
-function clampQuantityInput(value: string, maxQuantity: number) {
-  if (value === "" || maxQuantity < 1) {
-    return "";
-  }
-
-  const quantity = Math.floor(Number(value));
-  if (!Number.isFinite(quantity)) {
-    return "";
-  }
-
-  return Math.min(maxQuantity, Math.max(1, quantity)).toString();
-}
-
-function formatLotLabel(checkedOutAt: string) {
-  return `Lot ${formatDateTime(checkedOutAt)}`;
-}
-
-function createId(prefix: string) {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return `${prefix}-${crypto.randomUUID()}`;
-  }
-
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function escapeCsvValue(value: string) {
-  return `"${value.replace(/"/g, '""')}"`;
 }

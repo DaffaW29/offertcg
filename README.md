@@ -64,6 +64,15 @@ This repo currently contains a working MVP website with:
   performance, and monthly profit bars.
 - Inventory view for unsold cards across all buy lots with search, sorting, and
   lot navigation.
+- User portfolio entries separate from vendor buy lots, with raw condition and
+  graded slab tracking, quantity, private cert/notes, public-card toggles, and
+  estimated worth.
+- City-level nearby discovery for signed-in users who reveal their portfolio,
+  with map/list browsing, card filters, and distance sorting without storing
+  exact addresses.
+- Price research endpoint for source-specific portfolio comps, including the
+  latest five returned transactions and their average when a credentialed
+  provider is configured.
 - Quick buy percentage buttons: 70%, 75%, 80%, 85%, 90%, 95%, and 100%.
 - Cart and recent buy persistence across refreshes and login sessions.
 
@@ -121,15 +130,22 @@ in frontend code.
 
 ## Supabase Data
 
-Signed-in users store data in four RLS-protected tables:
+Signed-in users store data in RLS-protected tables:
 
 1. `current_deals`: active cart and global buy percentage.
 2. `deal_lots`: checked-out buy lots.
 3. `deal_lot_items`: card snapshots inside each lot.
 4. `sale_records`: partial sold entries for lot items.
+5. `profiles`: display name, manual city centroid, and portfolio reveal toggle.
+6. `portfolio_items`: user-owned raw/graded portfolio cards and valuation
+   snapshots.
 
 Deleting a lot removes its `deal_lots` row and cascades to the lot items and
 sale records through the schema relationships.
+
+Nearby discovery uses the `search_public_portfolios()` SQL function to expose
+only sanitized public portfolio fields to authenticated users. It does not
+return emails, cert numbers, private notes, exact addresses, or hidden cards.
 
 Existing local cart/recent buy data is imported once after first sign-in, then
 cleared from local storage.
@@ -154,6 +170,9 @@ Optional:
 
 ```bash
 POKEMON_TCG_API_KEY
+POKETRACE_API_KEY
+MAPBOX_TOKEN
+NEXT_PUBLIC_MAPBOX_TOKEN
 ```
 
 After deployment, configure Supabase Authentication URL settings with the
@@ -166,6 +185,7 @@ localhost development.
 npm run dev
 npm run lint
 npm run build
+node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --experimental-strip-types lib/portfolio/portfolio.test.mts
 ```
 
 ## Verification
@@ -175,6 +195,7 @@ The MVP was verified with:
 ```bash
 npm run lint
 npm run build
+node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --experimental-strip-types lib/portfolio/portfolio.test.mts
 curl "http://localhost:3000/api/cards/search?q=charizard"
 ```
 

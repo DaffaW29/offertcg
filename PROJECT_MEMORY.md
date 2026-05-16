@@ -84,3 +84,39 @@
 - Added inline recent-buy lot renaming. Local renames persist through existing
   recent-buy storage, while signed-in renames update `deal_lots.label` through
   Supabase before the local label changes.
+
+## 2026-05-15
+
+- Refactored the single-page workspace into focused `app/workspace` components
+  plus pure helper modules for formatting, search, storage, deal helpers, and
+  analytics derivations. API routes, Supabase schema/helpers, pricing provider
+  behavior, persistence keys, and CSV fields remain unchanged.
+- Applied the `ui-ux-pro-max` dashboard direction: dark financial palette,
+  compact trading-desk spacing, Fira Sans/Fira Code via `next/font/google`,
+  dense tables, mobile card table layouts, visible focus states, and
+  reduced-motion support.
+- `next/font/google` Fira builds need network access the first time fonts are
+  fetched if the Next cache is cold.
+- Verification covered lint, production build, and live Safari checks for search,
+  add-to-cart, percentage changes, quantity/manual override, CSV availability,
+  checkout to recent buys, analytics, inventory, and the profile popover.
+
+## 2026-05-16
+
+- Added user-owned portfolio tracking separate from vendor buy lots. Portfolio
+  items distinguish raw condition entries from graded slab entries, keep cert
+  numbers/notes private, store source-specific price snapshots, and compute
+  worth from recent transaction averages before market-price fallback.
+- Added Supabase `profiles`, `portfolio_items`, and
+  `search_public_portfolios()` to support signed-in nearby discovery. The RPC
+  returns sanitized city-level public fields only; exact locations, email,
+  cert numbers, private notes, and hidden cards are not exposed.
+- Added `/api/locations/city-search` with Mapbox city-only lookup and bundled
+  fallback cities, plus `/api/cards/price-research` for PokeTrace-backed recent
+  comps when `POKETRACE_API_KEY` is configured.
+- Nearby discovery uses a Mapbox GL JS runtime load when
+  `NEXT_PUBLIC_MAPBOX_TOKEN` is present and otherwise renders a local city
+  centroid fallback map.
+- Verification targets now include `npm run lint`, `npm run build`, and
+  `node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test
+  --experimental-strip-types lib/portfolio/portfolio.test.mts`.
