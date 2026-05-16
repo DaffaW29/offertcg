@@ -9,6 +9,14 @@ import {
   filterPublicPortfolioPins,
   haversineMiles
 } from "./location.ts";
+import {
+  dealLotItemToPortfolioItem,
+  dealLotToPortfolioItems,
+  getDealPortfolioImportCandidates,
+  mergePortfolioImportItems,
+  syncDealLinkedPortfolioItems
+} from "./deal-sync.ts";
+import type { DealLot } from "../deals.ts";
 import type {
   PortfolioItem,
   PortfolioPriceSource,
@@ -60,6 +68,38 @@ const ebaySource: PortfolioPriceSource = {
   ],
   averageLastFive: null,
   lastUpdated: "2026-05-06T00:00:00.000Z"
+};
+
+const dealLot: DealLot = {
+  id: "lot-1",
+  label: "Lot May 16",
+  checkedOutAt: "2026-05-16T12:00:00.000Z",
+  items: [
+    {
+      id: "sv3-125|holofoil|Near Mint",
+      providerCardId: "sv3-125",
+      variantId: "holofoil",
+      variantLabel: "Holofoil",
+      name: "Charizard ex",
+      setName: "Obsidian Flames",
+      cardNumber: "125/197",
+      rarity: "Double Rare",
+      condition: "Near Mint",
+      marketPrice: 12.5,
+      buyPercent: 70,
+      quantity: 2,
+      priceSource: "pokemon-tcg-api",
+      lastUpdated: "2026-05-15T00:00:00.000Z",
+      imageUrl: "https://images.pokemontcg.io/sv3/125.png",
+      externalUrl: "https://prices.pokemontcg.io/tcgplayer/sv3-125",
+      notes: "clean",
+      marketPriceMissing: false,
+      buyUnitPrice: 8.75,
+      buyTotal: 17.5,
+      soldQuantity: 0,
+      sales: []
+    }
+  ]
 };
 
 describe("portfolio valuation helpers", () => {
@@ -152,5 +192,52 @@ describe("portfolio discovery helpers", () => {
     ]);
     assert.equal("certNumber" in visible[0].cards[0], false);
     assert.equal(visible[0].city, "Los Angeles");
+  });
+});
+
+describe("deal portfolio sync helpers", () => {
+  it("converts unsold deal items into private raw portfolio items", () => {
+    const item = dealLotItemToPortfolioItem(dealLot, dealLot.items[0]);
+
+    assert.ok(item);
+    assert.equal(item.id, "deal|lot-1|sv3-125|holofoil|Near Mint");
+    assert.equal(item.sourceType, "deal");
+    assert.equal(item.sourceLotId, "lot-1");
+    assert.equal(item.sourceLotItemId, dealLot.items[0].id);
+    assert.equal(item.isPublic, false);
+    assert.equal(item.quantity, 2);
+    assert.equal(item.estimatedUnitValue, 12.5);
+    assert.equal(item.priceSources?.[0]?.source, "Pokemon TCG API");
+  });
+
+  it("suggests only recent buy items that are not already imported", () => {
+    const candidates = getDealPortfolioImportCandidates([dealLot], []);
+    const merged = mergePortfolioImportItems([], candidates);
+    const nextCandidates = getDealPortfolioImportCandidates(
+      [dealLot],
+      merged.items
+    );
+
+    assert.equal(candidates.length, 1);
+    assert.equal(merged.added.length, 1);
+    assert.equal(nextCandidates.length, 0);
+  });
+
+  it("syncs linked portfolio quantities and removes missing inventory", () => {
+    const importedItem = dealLotToPortfolioItems(dealLot)[0];
+    const partiallySoldLot: DealLot = {
+      ...dealLot,
+      items: [{ ...dealLot.items[0], soldQuantity: 1 }]
+    };
+    const partialSync = syncDealLinkedPortfolioItems(
+      [importedItem],
+      [partiallySoldLot]
+    );
+    const fullSync = syncDealLinkedPortfolioItems([importedItem], []);
+
+    assert.equal(partialSync.items[0].quantity, 1);
+    assert.equal(partialSync.changed.length, 1);
+    assert.equal(fullSync.items.length, 0);
+    assert.equal(fullSync.removed[0].id, importedItem.id);
   });
 });

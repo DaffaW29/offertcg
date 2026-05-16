@@ -80,6 +80,7 @@ create table if not exists public.profiles (
   longitude numeric(9, 6),
   place_name text,
   portfolio_public boolean not null default false,
+  auto_mirror_deal_items boolean not null default false,
   updated_at timestamptz not null default now()
 );
 
@@ -106,6 +107,11 @@ create table if not exists public.portfolio_items (
   price_sources jsonb not null default '[]'::jsonb,
   is_public boolean not null default true,
   notes text not null default '',
+  source_type text not null default 'manual' check (source_type in ('manual', 'deal')),
+  source_lot_id text,
+  source_lot_item_id text,
+  source_lot_label text,
+  source_checked_out_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (id, user_id),
@@ -115,6 +121,25 @@ create table if not exists public.portfolio_items (
     check (ownership_type <> 'graded' or (grader is not null and grade is not null))
 );
 
+alter table public.profiles
+  add column if not exists auto_mirror_deal_items boolean not null default false;
+
+alter table public.portfolio_items
+  add column if not exists source_type text not null default 'manual',
+  add column if not exists source_lot_id text,
+  add column if not exists source_lot_item_id text,
+  add column if not exists source_lot_label text,
+  add column if not exists source_checked_out_at timestamptz;
+
+do $$
+begin
+  alter table public.portfolio_items
+    add constraint portfolio_items_source_type_check
+    check (source_type in ('manual', 'deal'));
+exception
+  when duplicate_object then null;
+end $$;
+
 create index if not exists current_deals_user_id_idx on public.current_deals (user_id);
 create index if not exists deal_lots_user_id_checked_out_idx on public.deal_lots (user_id, checked_out_at desc);
 create index if not exists deal_lot_items_user_id_lot_id_idx on public.deal_lot_items (user_id, lot_id);
@@ -123,6 +148,11 @@ create index if not exists sale_records_lot_item_id_idx on public.sale_records (
 create index if not exists profiles_public_city_idx on public.profiles (portfolio_public, city, region);
 create index if not exists portfolio_items_user_id_idx on public.portfolio_items (user_id);
 create index if not exists portfolio_items_public_card_idx on public.portfolio_items (is_public, name, set_name);
+create unique index if not exists portfolio_items_deal_source_unique_idx
+on public.portfolio_items (user_id, source_lot_id, source_lot_item_id)
+where source_type = 'deal'
+  and source_lot_id is not null
+  and source_lot_item_id is not null;
 
 alter table public.current_deals enable row level security;
 alter table public.deal_lots enable row level security;

@@ -19,6 +19,12 @@ import type {
   PortfolioPriceSource,
   PublicPortfolioPin
 } from "@/lib/portfolio/types";
+import {
+  dealLotToPortfolioItems,
+  getDealPortfolioImportCandidates,
+  mergePortfolioImportItems,
+  syncDealLinkedPortfolioItems
+} from "@/lib/portfolio/deal-sync";
 import { estimatePortfolioWorth } from "@/lib/portfolio/valuation";
 import type { PortfolioPriceResearchResponse } from "@/lib/portfolio/pricing";
 import {
@@ -173,6 +179,9 @@ export default function Home() {
   );
   const [portfolioItems, setPortfolioItems] = useState<PortfolioItem[]>([]);
   const [portfolioMessage, setPortfolioMessage] = useState("");
+  const [selectedPortfolioImportIds, setSelectedPortfolioImportIds] = useState<
+    Record<string, boolean>
+  >({});
   const [cityQuery, setCityQuery] = useState("");
   const [cityResults, setCityResults] = useState<CityLocation[]>([]);
   const [cityMessage, setCityMessage] = useState("");
@@ -297,6 +306,10 @@ export default function Home() {
     const storedRecentBuys = readStoredRecentBuys();
     const storedPortfolioProfile = readStoredPortfolioProfile();
     const storedPortfolioItems = readStoredPortfolioItems();
+    const syncedStoredPortfolioItems = syncDealLinkedPortfolioItems(
+      storedPortfolioItems,
+      storedRecentBuys
+    ).items;
 
     const frame = window.requestAnimationFrame(() => {
       if (Array.isArray(storedDeal.cart)) {
@@ -306,7 +319,7 @@ export default function Home() {
       setSelectedLotId(storedRecentBuys[0]?.id ?? null);
       setPortfolioProfile(storedPortfolioProfile);
       setCityQuery(storedPortfolioProfile.location?.placeName ?? "");
-      setPortfolioItems(storedPortfolioItems);
+      setPortfolioItems(syncedStoredPortfolioItems);
       if (isValidPercent(storedDeal.globalBuyPercent)) {
         setGlobalBuyPercent(storedDeal.globalBuyPercent);
       }
@@ -420,7 +433,8 @@ export default function Home() {
           const shouldImportProfile =
             localPortfolioProfile.location !== null ||
             localPortfolioProfile.displayName !== "Collector" ||
-            localPortfolioProfile.portfolioPublic;
+            localPortfolioProfile.portfolioPublic ||
+            localPortfolioProfile.autoMirrorDealItems;
 
           if (shouldImportCart) {
             await saveCloudDealState(
@@ -482,6 +496,25 @@ export default function Home() {
           );
         } else {
           setCloudMessage("Cloud sync active.");
+        }
+
+        const portfolioSync = syncDealLinkedPortfolioItems(
+          cloudPortfolioItems,
+          cloudLots
+        );
+        if (
+          portfolioSync.changed.length > 0 ||
+          portfolioSync.removed.length > 0
+        ) {
+          await Promise.all([
+            ...portfolioSync.changed.map((item) =>
+              saveCloudPortfolioItem(supabaseClient, session.user.id, item)
+            ),
+            ...portfolioSync.removed.map((item) =>
+              deleteCloudPortfolioItem(supabaseClient, session.user.id, item.id)
+            )
+          ]);
+          cloudPortfolioItems = portfolioSync.items;
         }
 
         if (isCancelled) {
@@ -640,6 +673,18 @@ export default function Home() {
   const portfolioWorth = useMemo(() => {
     return estimatePortfolioWorth(portfolioItems.map((item) => ({ item })));
   }, [portfolioItems]);
+  const portfolioImportCandidates = useMemo(() => {
+    return getDealPortfolioImportCandidates(recentBuys, portfolioItems);
+  }, [portfolioItems, recentBuys]);
+  const effectiveSelectedPortfolioImportIds = useMemo(() => {
+    return portfolioImportCandidates.reduce<Record<string, boolean>>(
+      (selectedIds, item) => {
+        selectedIds[item.id] = selectedPortfolioImportIds[item.id] ?? true;
+        return selectedIds;
+      },
+      {}
+    );
+  }, [portfolioImportCandidates, selectedPortfolioImportIds]);
   const displayedResults = useMemo(() => {
     return pushNoMarketCardsDown ? sortCardsByMarketAvailability(results) : results;
   }, [pushNoMarketCardsDown, results]);
@@ -881,6 +926,84 @@ export default function Home() {
     setCart([]);
   }
 
+  function addPortfolioImportItems(items: PortfolioItem[], message: string) {
+    if (items.length === 0) {
+      setPortfolioMessage("No recent buy items are available to add.");
+      return;
+    }
+
+    const result = mergePortfolioImportItems(portfolioItems, items);
+    if (result.added.length === 0) {
+      setPortfolioMessage("Those recent buy items are already in portfolio.");
+      return;
+    }
+
+    setPortfolioItems(result.items);
+    result.added.forEach(persistPortfolioItem);
+    setSelectedPortfolioImportIds((current) => {
+      const next = { ...current };
+      result.added.forEach((item) => {
+        delete next[item.id];
+      });
+      return next;
+    });
+    setPortfolioMessage(message);
+  }
+
+  function togglePortfolioImportCandidate(itemId: string, checked: boolean) {
+    setSelectedPortfolioImportIds((current) => ({
+      ...current,
+      [itemId]: checked
+    }));
+  }
+
+  function addSelectedRecentBuysToPortfolio() {
+    const selectedItems = portfolioImportCandidates.filter(
+      (item) => effectiveSelectedPortfolioImportIds[item.id]
+    );
+
+    addPortfolioImportItems(
+      selectedItems,
+      `Added ${selectedItems.length} recent buy item${
+        selectedItems.length === 1 ? "" : "s"
+      } to portfolio.`
+    );
+  }
+
+  function addAllRecentBuysToPortfolio() {
+    addPortfolioImportItems(
+      portfolioImportCandidates,
+      `Added ${portfolioImportCandidates.length} recent buy item${
+        portfolioImportCandidates.length === 1 ? "" : "s"
+      } to portfolio.`
+    );
+  }
+
+  function applyDealPortfolioSync(nextRecentBuys: DealLot[]) {
+    const sync = syncDealLinkedPortfolioItems(portfolioItems, nextRecentBuys);
+    if (sync.changed.length === 0 && sync.removed.length === 0) {
+      return;
+    }
+
+    setPortfolioItems(sync.items);
+    sync.changed.forEach(persistPortfolioItem);
+    sync.removed.forEach((item) => persistDeletedPortfolioItem(item.id));
+  }
+
+  function persistDeletedPortfolioItem(itemId: string) {
+    if (supabaseClient && session && hasCloudDataLoaded) {
+      deleteCloudPortfolioItem(supabaseClient, session.user.id, itemId).catch(
+        (error: unknown) => {
+          setPortfolioMessage(
+            error instanceof Error
+              ? `Unable to remove synced portfolio item: ${error.message}`
+              : "Unable to remove synced portfolio item."
+          );
+        }
+      );
+    }
+  }
+
   function checkoutCart() {
     if (cart.length === 0) {
       return;
@@ -898,6 +1021,13 @@ export default function Home() {
     setSelectedLotId(lot.id);
     setCart([]);
     setActiveTab("recent");
+
+    if (portfolioProfile.autoMirrorDealItems) {
+      addPortfolioImportItems(
+        dealLotToPortfolioItems(lot),
+        "Checked-out cards were added to portfolio."
+      );
+    }
 
     if (supabaseClient && session && hasCloudDataLoaded) {
       saveCloudLot(supabaseClient, session.user.id, lot).catch((error: unknown) => {
@@ -952,28 +1082,29 @@ export default function Home() {
     };
     const nextSoldQuantity = item.soldQuantity + soldQuantity;
 
-    setRecentBuys((current) =>
-      current.map((lot) => {
-        if (lot.id !== lotId) {
-          return lot;
-        }
+    const nextRecentBuys = recentBuys.map((lot) => {
+      if (lot.id !== lotId) {
+        return lot;
+      }
 
-        return {
-          ...lot,
-          items: lot.items.map((item) => {
-            if (item.id !== itemId) {
-              return item;
-            }
+      return {
+        ...lot,
+        items: lot.items.map((item) => {
+          if (item.id !== itemId) {
+            return item;
+          }
 
-            return {
-              ...item,
-              soldQuantity: nextSoldQuantity,
-              sales: [...item.sales, sale]
-            };
-          })
-        };
-      })
-    );
+          return {
+            ...item,
+            soldQuantity: nextSoldQuantity,
+            sales: [...item.sales, sale]
+          };
+        })
+      };
+    });
+
+    setRecentBuys(nextRecentBuys);
+    applyDealPortfolioSync(nextRecentBuys);
 
     setSaleDrafts((current) => {
       const next = { ...current };
@@ -1107,6 +1238,7 @@ export default function Home() {
       cancelRenamingLot();
     }
     setRecentBuys(remainingLots);
+    applyDealPortfolioSync(remainingLots);
     setSelectedLotId((currentLotId) =>
       currentLotId === lotId ? remainingLots[0]?.id ?? null : currentLotId
     );
@@ -1363,7 +1495,8 @@ export default function Home() {
       priceUpdatedAt: card.lastUpdated || now,
       priceSources,
       isPublic: portfolioAddItemPublic,
-      notes: portfolioAddNotes.trim()
+      notes: portfolioAddNotes.trim(),
+      sourceType: "manual"
     };
 
     const existing = portfolioItems.find((item) => item.id === id);
@@ -1680,6 +1813,8 @@ export default function Home() {
             isCitySearching={isCitySearching}
             portfolioItems={portfolioItems}
             portfolioWorth={portfolioWorth}
+            importCandidates={portfolioImportCandidates}
+            selectedImportIds={effectiveSelectedPortfolioImportIds}
             searchQuery={portfolioSearchQuery}
             searchSetName={portfolioSearchSetName}
             searchCardNumber={portfolioSearchCardNumber}
@@ -1724,6 +1859,9 @@ export default function Home() {
             onRefreshItemPrice={(item) => void refreshPortfolioItemPrice(item)}
             onDeleteItem={(itemId) => void deletePortfolioItem(itemId)}
             onUpdateItem={updatePortfolioItem}
+            onToggleImportCandidate={togglePortfolioImportCandidate}
+            onAddSelectedImports={addSelectedRecentBuysToPortfolio}
+            onAddAllImports={addAllRecentBuysToPortfolio}
           />
         ) : activeTab === "nearby" ? (
           <NearbyView

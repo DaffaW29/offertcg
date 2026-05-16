@@ -117,6 +117,12 @@
 - Nearby discovery uses a Mapbox GL JS runtime load when
   `NEXT_PUBLIC_MAPBOX_TOKEN` is present and otherwise renders a local city
   centroid fallback map.
+- Added recent-buy portfolio imports. Profiles now have
+  `auto_mirror_deal_items`; when enabled, checkout creates private raw
+  portfolio entries linked to the lot item. When disabled, the Portfolio tab
+  suggests unsold recent buys with add-selected/add-all controls. Linked
+  portfolio quantities are inventory-managed and sync down on sales or lot
+  deletion.
 - Verification targets now include `npm run lint`, `npm run build`, and
   `node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test
   --experimental-strip-types lib/portfolio/portfolio.test.mts`.

@@ -9,6 +9,7 @@ import type {
   PortfolioItem,
   PortfolioOwnershipType,
   PortfolioPriceSource,
+  PortfolioSourceType,
   PublicPortfolioCard,
   PublicPortfolioPin
 } from "@/lib/portfolio/types";
@@ -18,6 +19,7 @@ import type { Database, Json } from "./types";
 export type PortfolioProfile = {
   displayName: string;
   portfolioPublic: boolean;
+  autoMirrorDealItems: boolean;
   location: CityLocation | null;
 };
 
@@ -59,6 +61,7 @@ export async function saveCloudPortfolioProfile(
     longitude: profile.location?.longitude ?? null,
     place_name: profile.location?.placeName ?? null,
     portfolio_public: profile.portfolioPublic,
+    auto_mirror_deal_items: profile.autoMirrorDealItems,
     updated_at: new Date().toISOString()
   });
 
@@ -130,6 +133,7 @@ export function defaultPortfolioProfile(): PortfolioProfile {
   return {
     displayName: "Collector",
     portfolioPublic: false,
+    autoMirrorDealItems: false,
     location: null
   };
 }
@@ -138,6 +142,7 @@ function mapProfileRow(row: ProfileRow): PortfolioProfile {
   return {
     displayName: row.display_name,
     portfolioPublic: row.portfolio_public,
+    autoMirrorDealItems: row.auto_mirror_deal_items ?? false,
     location:
       row.city && row.region && row.latitude !== null && row.longitude !== null
         ? {
@@ -176,7 +181,12 @@ function mapPortfolioItemRow(row: PortfolioItemRow): PortfolioItem {
       ? (row.price_sources as PortfolioPriceSource[])
       : [],
     isPublic: row.is_public,
-    notes: row.notes
+    notes: row.notes,
+    sourceType: (row.source_type as PortfolioSourceType | undefined) ?? "manual",
+    sourceLotId: row.source_lot_id ?? undefined,
+    sourceLotItemId: row.source_lot_item_id ?? undefined,
+    sourceLotLabel: row.source_lot_label ?? undefined,
+    sourceCheckedOutAt: row.source_checked_out_at ?? undefined
   };
 
   return {
@@ -212,6 +222,11 @@ function mapPortfolioItemToRow(
     price_sources: (item.priceSources ?? []) as unknown as Json,
     is_public: item.isPublic,
     notes: item.notes,
+    source_type: item.sourceType ?? "manual",
+    source_lot_id: item.sourceLotId ?? null,
+    source_lot_item_id: item.sourceLotItemId ?? null,
+    source_lot_label: item.sourceLotLabel ?? null,
+    source_checked_out_at: item.sourceCheckedOutAt ?? null,
     updated_at: new Date().toISOString()
   };
 }

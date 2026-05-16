@@ -11,6 +11,7 @@ export const GRADING_COMPANIES = [
 
 export type GradingCompany = (typeof GRADING_COMPANIES)[number];
 export type PortfolioOwnershipType = "raw" | "graded";
+export type PortfolioSourceType = "manual" | "deal";
 export type PortfolioSort = "distance" | "value" | "cards" | "updated";
 
 export type CityLocation = {
@@ -68,6 +69,11 @@ export type PortfolioItem = {
   priceSources?: PortfolioPriceSource[];
   isPublic: boolean;
   notes: string;
+  sourceType?: PortfolioSourceType;
+  sourceLotId?: string;
+  sourceLotItemId?: string;
+  sourceLotLabel?: string;
+  sourceCheckedOutAt?: string;
 };
 
 export type PublicPortfolioCard = Pick<

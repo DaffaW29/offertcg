@@ -155,6 +155,7 @@ export type Database = {
           longitude: number | null;
           place_name: string | null;
           portfolio_public: boolean;
+          auto_mirror_deal_items: boolean;
           updated_at: string;
         };
         Insert: {
@@ -167,6 +168,7 @@ export type Database = {
           longitude?: number | null;
           place_name?: string | null;
           portfolio_public?: boolean;
+          auto_mirror_deal_items?: boolean;
           updated_at?: string;
         };
         Update: {
@@ -178,6 +180,7 @@ export type Database = {
           longitude?: number | null;
           place_name?: string | null;
           portfolio_public?: boolean;
+          auto_mirror_deal_items?: boolean;
           updated_at?: string;
         };
         Relationships: [];
@@ -206,6 +209,11 @@ export type Database = {
           price_sources: Json;
           is_public: boolean;
           notes: string;
+          source_type: string;
+          source_lot_id: string | null;
+          source_lot_item_id: string | null;
+          source_lot_label: string | null;
+          source_checked_out_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -232,6 +240,11 @@ export type Database = {
           price_sources?: Json;
           is_public?: boolean;
           notes?: string;
+          source_type?: string;
+          source_lot_id?: string | null;
+          source_lot_item_id?: string | null;
+          source_lot_label?: string | null;
+          source_checked_out_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -249,6 +262,11 @@ export type Database = {
           price_sources?: Json;
           is_public?: boolean;
           notes?: string;
+          source_type?: string;
+          source_lot_id?: string | null;
+          source_lot_item_id?: string | null;
+          source_lot_label?: string | null;
+          source_checked_out_at?: string | null;
           updated_at?: string;
         };
         Relationships: [];

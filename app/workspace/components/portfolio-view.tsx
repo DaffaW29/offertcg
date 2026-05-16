@@ -38,6 +38,8 @@ export function PortfolioView({
   isCitySearching,
   portfolioItems,
   portfolioWorth,
+  importCandidates,
+  selectedImportIds,
   searchQuery,
   searchSetName,
   searchCardNumber,
@@ -79,7 +81,10 @@ export function PortfolioView({
   onAddCard,
   onRefreshItemPrice,
   onDeleteItem,
-  onUpdateItem
+  onUpdateItem,
+  onToggleImportCandidate,
+  onAddSelectedImports,
+  onAddAllImports
 }: {
   sessionActive: boolean;
   profile: PortfolioProfile;
@@ -90,6 +95,8 @@ export function PortfolioView({
   isCitySearching: boolean;
   portfolioItems: PortfolioItem[];
   portfolioWorth: PortfolioWorth;
+  importCandidates: PortfolioItem[];
+  selectedImportIds: Record<string, boolean>;
   searchQuery: string;
   searchSetName: string;
   searchCardNumber: string;
@@ -135,7 +142,14 @@ export function PortfolioView({
     itemId: string,
     updater: (item: PortfolioItem) => PortfolioItem
   ) => void;
+  onToggleImportCandidate: (itemId: string, checked: boolean) => void;
+  onAddSelectedImports: () => void;
+  onAddAllImports: () => void;
 }) {
+  const selectedImportCount = importCandidates.filter(
+    (item) => selectedImportIds[item.id]
+  ).length;
+
   return (
     <section className="portfolio-view">
       <section className="panel portfolio-settings-panel">
@@ -201,6 +215,23 @@ export function PortfolioView({
             <span>
               {profile.portfolioPublic ? <Eye size={16} /> : <EyeOff size={16} />}
               Reveal city-level portfolio
+            </span>
+          </label>
+
+          <label className="toggle-option portfolio-toggle">
+            <input
+              type="checkbox"
+              checked={profile.autoMirrorDealItems}
+              onChange={(event) =>
+                onProfileChange({
+                  ...profile,
+                  autoMirrorDealItems: event.target.checked
+                })
+              }
+            />
+            <span>
+              <Plus size={16} />
+              Auto-add checked-out deals
             </span>
           </label>
 
@@ -473,111 +504,184 @@ export function PortfolioView({
             </div>
           </div>
 
+          {!profile.autoMirrorDealItems && importCandidates.length > 0 ? (
+            <section className="portfolio-import-box">
+              <div className="portfolio-import-heading">
+                <div>
+                  <p className="eyebrow">Recent buys</p>
+                  <h3>Ready to add to portfolio</h3>
+                </div>
+                <div className="portfolio-import-actions">
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    onClick={onAddSelectedImports}
+                    disabled={selectedImportCount === 0}
+                  >
+                    Add selected
+                  </button>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={onAddAllImports}
+                  >
+                    Add all
+                  </button>
+                </div>
+              </div>
+              <div className="portfolio-import-list">
+                {importCandidates.map((item) => (
+                  <label className="portfolio-import-row" key={item.id}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(selectedImportIds[item.id])}
+                      onChange={(event) =>
+                        onToggleImportCandidate(item.id, event.target.checked)
+                      }
+                    />
+                    <CardThumb card={item} compact />
+                    <span>
+                      <strong>{item.name}</strong>
+                      <small>
+                        {item.setName} #{item.cardNumber} · {item.condition} ·{" "}
+                        Qty {item.quantity}
+                      </small>
+                      <small>{item.sourceLotLabel}</small>
+                    </span>
+                    <strong>{formatCurrency(item.estimatedUnitValue)}</strong>
+                  </label>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
           {portfolioItems.length === 0 ? (
             <div className="empty-state">
               <span>Add cards to start tracking your portfolio.</span>
             </div>
           ) : (
             <div className="portfolio-item-list">
-              {portfolioItems.map((item) => (
-                <article className="portfolio-item-card" key={item.id}>
-                  <CardThumb card={item} compact />
-                  <div className="portfolio-item-main">
-                    <div>
-                      <h3>{item.name}</h3>
-                      <p>
-                        {item.setName} #{item.cardNumber} · {item.variantLabel}
-                      </p>
+              {portfolioItems.map((item) => {
+                const isInventoryLinked = item.sourceType === "deal";
+
+                return (
+                  <article className="portfolio-item-card" key={item.id}>
+                    <CardThumb card={item} compact />
+                    <div className="portfolio-item-main">
+                      <div>
+                        <h3>{item.name}</h3>
+                        <p>
+                          {item.setName} #{item.cardNumber} · {item.variantLabel}
+                        </p>
+                        <p className="muted">
+                          {item.ownershipType === "graded"
+                            ? `${item.grader} ${item.grade}`
+                            : item.condition}{" "}
+                          · Tier {portfolioItemTier(item)}
+                        </p>
+                        {isInventoryLinked ? (
+                          <p className="muted">
+                            From {item.sourceLotLabel ?? "recent buy"}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="portfolio-price-sources">
+                        {(item.priceSources ?? []).slice(0, 3).map((source) => (
+                          <div key={`${item.id}-${source.source}`}>
+                            <span>
+                              {source.source}:{" "}
+                              {source.averageLastFive !== null
+                                ? `${formatCurrency(source.averageLastFive)} avg`
+                                : source.marketPrice !== null
+                                  ? formatCurrency(source.marketPrice)
+                                  : "No comps"}
+                            </span>
+                            {source.transactions.length > 0 ? (
+                              <ol>
+                                {source.transactions
+                                  .slice(0, 5)
+                                  .map((transaction) => (
+                                    <li key={transaction.id}>
+                                      {formatCurrency(transaction.price)} ·{" "}
+                                      {formatPriceDate(transaction.soldAt)}
+                                    </li>
+                                  ))}
+                              </ol>
+                            ) : source.message ? (
+                              <small>{source.message}</small>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
                       <p className="muted">
-                        {item.ownershipType === "graded"
-                          ? `${item.grader} ${item.grade}`
-                          : item.condition}{" "}
-                        · Tier {portfolioItemTier(item)}
+                        Updated {formatPriceDate(item.priceUpdatedAt)}
                       </p>
                     </div>
-                    <div className="portfolio-price-sources">
-                      {(item.priceSources ?? []).slice(0, 3).map((source) => (
-                        <div key={`${item.id}-${source.source}`}>
-                          <span>
-                            {source.source}:{" "}
-                            {source.averageLastFive !== null
-                              ? `${formatCurrency(source.averageLastFive)} avg`
-                              : source.marketPrice !== null
-                                ? formatCurrency(source.marketPrice)
-                                : "No comps"}
-                          </span>
-                          {source.transactions.length > 0 ? (
-                            <ol>
-                              {source.transactions.slice(0, 5).map((transaction) => (
-                                <li key={transaction.id}>
-                                  {formatCurrency(transaction.price)} ·{" "}
-                                  {formatPriceDate(transaction.soldAt)}
-                                </li>
-                              ))}
-                            </ol>
-                          ) : source.message ? (
-                            <small>{source.message}</small>
-                          ) : null}
+                    <div className="portfolio-item-actions">
+                      <strong>{formatCurrency(item.estimatedUnitValue)}</strong>
+                      {isInventoryLinked ? (
+                        <div className="inventory-managed-quantity">
+                          <span>Qty</span>
+                          <strong>{item.quantity}</strong>
+                          <small>Managed by inventory</small>
                         </div>
-                      ))}
-                    </div>
-                    <p className="muted">
-                      Updated {formatPriceDate(item.priceUpdatedAt)}
-                    </p>
-                  </div>
-                  <div className="portfolio-item-actions">
-                    <strong>{formatCurrency(item.estimatedUnitValue)}</strong>
-                    <label>
-                      Qty
-                      <input
-                        min="1"
-                        type="number"
-                        value={item.quantity}
-                        onChange={(event) =>
-                          onUpdateItem(item.id, (current) => ({
-                            ...current,
-                            quantity: Math.max(1, Math.floor(Number(event.target.value)))
-                          }))
-                        }
-                      />
-                    </label>
-                    <label className="toggle-option">
-                      <input
-                        type="checkbox"
-                        checked={item.isPublic}
-                        onChange={(event) =>
-                          onUpdateItem(item.id, (current) => ({
-                            ...current,
-                            isPublic: event.target.checked
-                          }))
-                        }
-                      />
-                      <span>Public card</span>
-                    </label>
-                    <button
-                      className="ghost-button"
-                      type="button"
-                      onClick={() => onRefreshItemPrice(item)}
-                      disabled={refreshingItemId === item.id}
-                    >
-                      {refreshingItemId === item.id ? (
-                        <Loader2 className="spin" size={15} />
                       ) : (
-                        <RefreshCw size={15} />
+                        <label>
+                          Qty
+                          <input
+                            min="1"
+                            type="number"
+                            value={item.quantity}
+                            onChange={(event) =>
+                              onUpdateItem(item.id, (current) => ({
+                                ...current,
+                                quantity: Math.max(
+                                  1,
+                                  Math.floor(Number(event.target.value))
+                                )
+                              }))
+                            }
+                          />
+                        </label>
                       )}
-                      Refresh
-                    </button>
-                    <button
-                      className="ghost-button danger"
-                      type="button"
-                      onClick={() => onDeleteItem(item.id)}
-                    >
-                      <Trash2 size={15} />
-                      Remove
-                    </button>
-                  </div>
-                </article>
-              ))}
+                      <label className="toggle-option">
+                        <input
+                          type="checkbox"
+                          checked={item.isPublic}
+                          onChange={(event) =>
+                            onUpdateItem(item.id, (current) => ({
+                              ...current,
+                              isPublic: event.target.checked
+                            }))
+                          }
+                        />
+                        <span>Public card</span>
+                      </label>
+                      <button
+                        className="ghost-button"
+                        type="button"
+                        onClick={() => onRefreshItemPrice(item)}
+                        disabled={refreshingItemId === item.id}
+                      >
+                        {refreshingItemId === item.id ? (
+                          <Loader2 className="spin" size={15} />
+                        ) : (
+                          <RefreshCw size={15} />
+                        )}
+                        Refresh
+                      </button>
+                      <button
+                        className="ghost-button danger"
+                        type="button"
+                        onClick={() => onDeleteItem(item.id)}
+                      >
+                        <Trash2 size={15} />
+                        Remove
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           )}
 

@@ -55,6 +55,7 @@ export function readStoredPortfolioProfile(): PortfolioProfile {
     return {
       ...defaultPortfolioProfile(),
       ...parsedProfile,
+      autoMirrorDealItems: parsedProfile.autoMirrorDealItems ?? false,
       location: parsedProfile.location ?? null
     };
   } catch {

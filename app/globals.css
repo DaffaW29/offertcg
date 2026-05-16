@@ -1513,7 +1513,7 @@ tfoot td {
 }
 
 .portfolio-settings-grid {
-  grid-template-columns: minmax(180px, 0.28fr) minmax(260px, 0.42fr) minmax(220px, 0.3fr) auto;
+  grid-template-columns: minmax(160px, 0.22fr) minmax(260px, 0.34fr) repeat(2, minmax(210px, 0.22fr)) auto;
 }
 
 .portfolio-card-search {
@@ -1563,6 +1563,63 @@ tfoot td {
 .portfolio-item-list {
   max-height: clamp(30rem, 72vh, 58rem);
   overflow-y: auto;
+}
+
+.portfolio-import-box {
+  background: var(--panel-subtle);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 0.7rem;
+  margin-bottom: 0.85rem;
+  padding: 0.75rem;
+}
+
+.portfolio-import-heading,
+.portfolio-import-actions,
+.portfolio-import-row {
+  align-items: center;
+  display: flex;
+  gap: 0.6rem;
+}
+
+.portfolio-import-heading {
+  justify-content: space-between;
+}
+
+.portfolio-import-heading h3 {
+  margin: 0;
+}
+
+.portfolio-import-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.portfolio-import-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.portfolio-import-row {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  padding: 0.55rem;
+}
+
+.portfolio-import-row > span {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.portfolio-import-row small {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 800;
 }
 
 .result-card.compact {
@@ -1640,6 +1697,22 @@ tfoot td {
 
 .portfolio-item-actions input[type="number"] {
   max-width: 7rem;
+}
+
+.inventory-managed-quantity {
+  background: var(--panel-subtle);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.55rem;
+}
+
+.inventory-managed-quantity span,
+.inventory-managed-quantity small {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 800;
 }
 
 .portfolio-toggle span {
@@ -1983,6 +2056,7 @@ tfoot td {
   }
 
   .panel-heading,
+  .portfolio-import-heading,
   .pagination-bar,
   .percent-toolbar {
     align-items: stretch;
@@ -1994,6 +2068,7 @@ tfoot td {
   .lot-title-actions,
   .lot-rename-controls,
   .pagination-controls,
+  .portfolio-import-actions,
   .sale-form,
   .segmented-control,
   .quick-buttons {
@@ -2006,6 +2081,7 @@ tfoot td {
   .lot-rename-controls button,
   .lot-rename-controls input,
   .pagination-controls button,
+  .portfolio-import-actions button,
   .segmented-control button,
   .sale-form button,
   .cart-actions button {
