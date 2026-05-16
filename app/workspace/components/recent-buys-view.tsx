@@ -30,7 +30,12 @@ import type {
   LotHistorySort,
   SaleDraft
 } from "../types";
-import { CardThumb, MetricStack, SummaryMetric } from "./primitives";
+import {
+  CardThumb,
+  KPICard,
+  ScreenBanner,
+  SectionHeader
+} from "./primitives";
 
 export function RecentBuysView({
   recentBuys,
@@ -84,120 +89,118 @@ export function RecentBuysView({
   onMarkItemSold: (lotId: string, itemId: string) => void;
 }) {
   return (
-    <section className="recent-buys-view">
-      <div className="summary-grid recent-summary" aria-label="Recent buy totals">
-        <SummaryMetric
-          label="Total buy cost"
-          value={formatCurrency(portfolioSummary.buyCost)}
-        />
-        <SummaryMetric
-          label="Sold revenue"
-          value={formatCurrency(portfolioSummary.soldRevenue)}
-        />
-        <SummaryMetric
-          label="Gross profit"
-          value={formatCurrency(portfolioSummary.realizedProfit)}
-          strong
-        />
-      </div>
+    <>
+      <ScreenBanner
+        eyebrow="Recent Buys"
+        title="Every lot, tracked"
+        titleAccent="end-to-end."
+        subtitle="See what you bought, what you sold, and what's still sitting. Track each lot from checkout to profit."
+        kpis={
+          <>
+            <KPICard label="Total buy cost" value={formatCurrency(portfolioSummary.buyCost)} sub="All lots combined" />
+            <KPICard label="Sold revenue" value={formatCurrency(portfolioSummary.soldRevenue)} sub="Total realized" />
+            <KPICard label="Gross profit" value={formatCurrency(portfolioSummary.realizedProfit)} sub="Revenue − cost" accent />
+          </>
+        }
+      />
 
       {recentBuys.length > 0 ? (
-        <div className="history-toolbar">
-          <label>
-            Search lots
-            <input
-              value={lotHistoryQuery}
-              onChange={(event) => onLotHistoryQueryChange(event.target.value)}
-              placeholder="Lot, card, set, condition..."
-            />
-          </label>
-          <label>
-            Sort by
-            <select
-              value={lotHistorySort}
-              onChange={(event) =>
-                onLotHistorySortChange(event.target.value as LotHistorySort)
-              }
-            >
-              {LOT_HISTORY_SORT_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="history-filters" aria-label="Lot history filter">
-            {LOT_HISTORY_FILTER_OPTIONS.map((option) => (
-              <button
-                className={lotHistoryFilter === option.value ? "active" : ""}
-                key={option.value}
-                type="button"
-                onClick={() => onLotHistoryFilterChange(option.value)}
+        <div className="surface" style={{ padding: 18, marginBottom: 18 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 12, alignItems: "end" }}>
+            <div>
+              <label className="field-label">Search lots</label>
+              <input
+                className="input"
+                value={lotHistoryQuery}
+                onChange={(event) => onLotHistoryQueryChange(event.target.value)}
+                placeholder="Lot, card, set, condition..."
+              />
+            </div>
+            <div>
+              <label className="field-label">Sort by</label>
+              <select
+                className="select"
+                value={lotHistorySort}
+                onChange={(event) =>
+                  onLotHistorySortChange(event.target.value as LotHistorySort)
+                }
               >
-                {option.label}
-              </button>
-            ))}
+                {LOT_HISTORY_SORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {LOT_HISTORY_FILTER_OPTIONS.map((option) => (
+                <button
+                  className={`percent-chip${lotHistoryFilter === option.value ? " active" : ""}`}
+                  key={option.value}
+                  type="button"
+                  onClick={() => onLotHistoryFilterChange(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       ) : null}
 
       {recentBuys.length === 0 ? (
-        <section className="panel">
-          <div className="empty-state">
-            <span>Checkout a deal cart to start tracking recent buys.</span>
-          </div>
-        </section>
+        <div className="surface empty" style={{ padding: 48 }}>
+          <span>Checkout a deal cart to start tracking recent buys.</span>
+        </div>
       ) : visibleLots.length === 0 ? (
-        <section className="panel">
-          <div className="empty-state">
-            <span>No lots match the current history filters.</span>
-          </div>
-        </section>
+        <div className="surface empty" style={{ padding: 48 }}>
+          <span>No lots match the current history filters.</span>
+        </div>
       ) : (
-        <section className="recent-grid">
-          <aside className="panel lot-list-panel" aria-label="Recent buy lots">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">Recent buys</p>
-                <h2>Lots</h2>
-              </div>
-            </div>
+        <div style={{ display: "grid", gridTemplateColumns: "380px 1fr", gap: 18 }}>
+          <aside className="surface" style={{ padding: 20 }}>
+            <SectionHeader eyebrow="Recent Buys" title="Lots" />
             <div className="lot-list">
               {visibleLots.map((lot) => {
                 const totals = lotTotals(lot);
                 const lotNet = lotNetProfit(lot);
                 const badges = lotStatusBadges(lot);
+                const isActive = historySelectedLot?.id === lot.id;
 
                 return (
                   <button
-                    className={
-                      historySelectedLot?.id === lot.id
-                        ? "lot-list-item active"
-                        : "lot-list-item"
-                    }
+                    className={`lot-list-item${isActive ? " active" : ""}`}
                     key={lot.id}
                     type="button"
                     onClick={() => onSelectLot(lot.id)}
                   >
-                    <span>
-                      <strong>{lot.label}</strong>
-                      <small>{formatDateTime(lot.checkedOutAt)}</small>
-                    </span>
-                    <span className="status-badges">
-                      {badges.map((badge) => (
-                        <span
-                          className={`status-badge ${badge.tone}`}
-                          key={badge.label}
-                        >
-                          {badge.label}
-                        </span>
-                      ))}
-                    </span>
-                    <span>
-                      {totals.remainingQuantity} left ·{" "}
-                      {formatCurrency(lotNet)} net ·{" "}
-                      {formatPercent(roiPercent(lotNet, totals.buyCost))}
-                    </span>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                      <div>
+                        <strong style={{ fontSize: 14 }}>{lot.label}</strong>
+                        <div className="text-xs text-3">{formatDateTime(lot.checkedOutAt)}</div>
+                      </div>
+                      <span className="status-badges">
+                        {badges.map((badge) => (
+                          <span
+                            className={`chip chip-${badge.tone === "profit" ? "pos" : badge.tone === "loss" ? "neg" : "accent"}`}
+                            key={badge.label}
+                            style={{ fontSize: 10 }}
+                          >
+                            {badge.label}
+                          </span>
+                        ))}
+                      </span>
+                    </div>
+                    <div className="text-xs text-3" style={{ marginTop: 6 }}>
+                      {totals.remainingQuantity} left · {formatCurrency(lotNet)} net · {formatPercent(roiPercent(lotNet, totals.buyCost))}
+                    </div>
+                    <div className="lot-progress-bar">
+                      <div
+                        style={{
+                          width: `${totals.quantity > 0 ? ((totals.quantity - totals.remainingQuantity) / totals.quantity) * 100 : 0}%`
+                        }}
+                      />
+                    </div>
                   </button>
                 );
               })}
@@ -205,23 +208,20 @@ export function RecentBuysView({
           </aside>
 
           {historySelectedLot && historySelectedLotTotals ? (
-            <section className="panel lot-detail-panel">
-              <div className="panel-heading lot-detail-heading">
-                <div className="lot-detail-title">
+            <section className="surface" style={{ padding: 20 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
+                <div style={{ flex: 1 }}>
                   {editingLotId === historySelectedLot.id ? (
                     <form
-                      className="lot-rename-form"
                       onSubmit={(event) =>
                         onSaveLotRename(event, historySelectedLot.id)
                       }
                     >
-                      <p className="eyebrow">Lot detail</p>
-                      <label htmlFor={`lot-name-${historySelectedLot.id}`}>
-                        Lot name
-                      </label>
-                      <div className="lot-rename-controls">
+                      <div className="eyebrow" style={{ marginBottom: 4 }}>Lot detail</div>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                         <input
-                          id={`lot-name-${historySelectedLot.id}`}
+                          className="input"
+                          style={{ maxWidth: 300 }}
                           maxLength={MAX_LOT_LABEL_LENGTH}
                           value={lotNameDraft}
                           onChange={(event) =>
@@ -231,90 +231,67 @@ export function RecentBuysView({
                           disabled={isRenamingLot}
                         />
                         <button
-                          className="secondary-button"
+                          className="btn btn-primary btn-sm"
                           type="submit"
-                          disabled={
-                            isRenamingLot || lotNameDraft.trim().length === 0
-                          }
+                          disabled={isRenamingLot || lotNameDraft.trim().length === 0}
                         >
-                          <CheckCircle size={17} />
-                          Save
+                          <CheckCircle size={12} /> Save
                         </button>
                         <button
-                          className="ghost-button"
+                          className="btn btn-ghost btn-sm"
                           type="button"
                           onClick={onCancelRenamingLot}
                           disabled={isRenamingLot}
                         >
-                          <X size={17} />
-                          Cancel
+                          <X size={12} /> Cancel
                         </button>
                       </div>
                       {lotRenameError ? (
-                        <p className="input-error">{lotRenameError}</p>
+                        <p className="text-xs" style={{ color: "var(--neg)", marginTop: 4 }}>{lotRenameError}</p>
                       ) : null}
-                      <p className="muted">
-                        Checked out {formatDateTime(historySelectedLot.checkedOutAt)}
-                      </p>
                     </form>
                   ) : (
                     <div>
-                      <p className="eyebrow">Lot detail</p>
-                      <h2>{historySelectedLot.label}</h2>
-                      <p className="muted">
+                      <div className="eyebrow" style={{ marginBottom: 4 }}>Lot detail</div>
+                      <h2 style={{ fontFamily: "var(--font-display-family)", fontWeight: 700, fontSize: 22, margin: 0 }}>
+                        {historySelectedLot.label}
+                      </h2>
+                      <div className="text-xs text-3" style={{ marginTop: 4 }}>
                         Checked out {formatDateTime(historySelectedLot.checkedOutAt)}
-                      </p>
-                    </div>
-                  )}
-                  {editingLotId === historySelectedLot.id ? null : (
-                    <div className="lot-title-actions">
-                      <button
-                        className="ghost-button"
-                        type="button"
-                        onClick={() => onStartRenamingLot(historySelectedLot)}
-                      >
-                        <Pencil size={17} />
-                        Rename
-                      </button>
-                      <button
-                        className="ghost-button danger"
-                        type="button"
-                        onClick={() => onDeleteLot(historySelectedLot.id)}
-                      >
-                        <Trash2 size={17} />
-                        Delete lot
-                      </button>
+                      </div>
                     </div>
                   )}
                 </div>
-                <div className="lot-metrics" aria-label="Selected lot totals">
-                  <SummaryMetric
-                    label="Buy cost"
-                    value={formatCurrency(historySelectedLotTotals.buyCost)}
-                  />
-                  <SummaryMetric
-                    label="Sold"
-                    value={formatCurrency(historySelectedLotTotals.soldRevenue)}
-                  />
-                  <SummaryMetric
-                    label="Lot net"
-                    value={formatCurrency(lotNetProfit(historySelectedLot))}
-                    strong
-                  />
-                  <SummaryMetric
-                    label="Sold profit"
-                    value={formatCurrency(historySelectedLotTotals.grossProfit)}
-                  />
-                </div>
+                {editingLotId !== historySelectedLot.id ? (
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      type="button"
+                      onClick={() => onStartRenamingLot(historySelectedLot)}
+                    >
+                      <Pencil size={12} /> Rename
+                    </button>
+                    <button
+                      className="btn btn-danger btn-sm"
+                      type="button"
+                      onClick={() => onDeleteLot(historySelectedLot.id)}
+                    >
+                      <Trash2 size={12} /> Delete
+                    </button>
+                  </div>
+                ) : null}
               </div>
 
-              <div className="lot-items">
+              <div className="kpi-strip" style={{ marginBottom: 18 }}>
+                <KPICard label="Buy cost" value={formatCurrency(historySelectedLotTotals.buyCost)} />
+                <KPICard label="Sold" value={formatCurrency(historySelectedLotTotals.soldRevenue)} />
+                <KPICard label="Lot net" value={formatCurrency(lotNetProfit(historySelectedLot))} accent />
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 {historySelectedLot.items.map((item) => {
                   const key = saleDraftKey(historySelectedLot.id, item.id);
-                  const draft = saleDrafts[key] ?? {
-                    quantity: "",
-                    saleTotal: ""
-                  };
+                  const draft = saleDrafts[key] ?? { quantity: "", saleTotal: "" };
                   const remaining = remainingQuantity(item);
                   const draftQuantity = Number(draft.quantity);
                   const draftSaleTotal = Number(draft.saleTotal);
@@ -326,64 +303,64 @@ export function RecentBuysView({
                     draftSaleTotal > 0;
 
                   return (
-                    <article className="lot-item" key={item.id}>
-                      <div className="lot-item-main">
+                    <article
+                      key={item.id}
+                      style={{
+                        border: "1px solid var(--border)",
+                        borderRadius: 14,
+                        padding: 14,
+                        display: "grid",
+                        gridTemplateColumns: "1fr auto",
+                        gap: 14,
+                        alignItems: "center"
+                      }}
+                    >
+                      <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                         <CardThumb card={item} compact />
-                        <div>
-                          <h3>{item.name}</h3>
-                          <p>
-                            {item.setName} #{item.cardNumber}
-                          </p>
-                          <p className="muted">
-                            {item.variantLabel} · {item.condition}
-                          </p>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: 14 }}>{item.name}</div>
+                          <div className="text-xs text-3">
+                            {item.setName} #{item.cardNumber} · {item.variantLabel} · {item.condition}
+                          </div>
+                          <div className="text-xs" style={{ marginTop: 4, display: "flex", gap: 12 }}>
+                            <span>Bought: <strong>{item.quantity}</strong></span>
+                            <span>Left: <strong>{remaining}</strong></span>
+                            <span>Cost: <strong>{formatCurrency(item.buyTotal)}</strong></span>
+                            <span>Sold: <strong>{formatCurrency(soldRevenue(item))}</strong></span>
+                            <span style={{ color: grossProfit(item) >= 0 ? "var(--pos)" : "var(--neg)" }}>
+                              Profit: <strong>{formatCurrency(grossProfit(item))}</strong>
+                            </span>
+                          </div>
                         </div>
                       </div>
-
-                      <div className="lot-item-stats">
-                        <MetricStack label="Bought" value={item.quantity.toString()} />
-                        <MetricStack label="Remaining" value={remaining.toString()} />
-                        <MetricStack
-                          label="Buy cost"
-                          value={formatCurrency(item.buyTotal)}
-                        />
-                        <MetricStack
-                          label="Sold"
-                          value={formatCurrency(soldRevenue(item))}
-                        />
-                        <MetricStack
-                          label="Sold profit"
-                          value={formatCurrency(grossProfit(item))}
-                        />
-                      </div>
-
-                      <div className="sale-form" aria-label={`Mark ${item.name} sold`}>
-                        <label>
-                          Qty sold
+                      <div style={{ display: "flex", gap: 8, alignItems: "end" }}>
+                        <div>
+                          <label className="field-label">Qty</label>
                           <input
+                            className="input mono"
                             type="number"
                             min="1"
                             max={remaining}
                             step="1"
+                            style={{ width: 60, height: 32, fontSize: 12, textAlign: "right" }}
                             value={draft.quantity}
                             onChange={(event) =>
                               onUpdateSaleDraft(key, {
                                 ...draft,
-                                quantity: clampQuantityInput(
-                                  event.target.value,
-                                  remaining
-                                )
+                                quantity: clampQuantityInput(event.target.value, remaining)
                               })
                             }
                             disabled={remaining === 0}
                           />
-                        </label>
-                        <label>
-                          Sale total
+                        </div>
+                        <div>
+                          <label className="field-label">Sale $</label>
                           <input
+                            className="input mono"
                             type="number"
                             min="0"
                             step="0.01"
+                            style={{ width: 80, height: 32, fontSize: 12, textAlign: "right" }}
                             value={draft.saleTotal}
                             onChange={(event) =>
                               onUpdateSaleDraft(key, {
@@ -394,15 +371,14 @@ export function RecentBuysView({
                             placeholder="0.00"
                             disabled={remaining === 0}
                           />
-                        </label>
+                        </div>
                         <button
-                          className="secondary-button"
+                          className="btn btn-soft btn-sm"
                           type="button"
                           onClick={() => onMarkItemSold(historySelectedLot.id, item.id)}
                           disabled={!canRecordSale}
                         >
-                          <CheckCircle size={17} />
-                          Mark sold
+                          <CheckCircle size={12} /> Mark sold
                         </button>
                       </div>
                     </article>
@@ -411,8 +387,8 @@ export function RecentBuysView({
               </div>
             </section>
           ) : null}
-        </section>
+        </div>
       )}
-    </section>
+    </>
   );
 }

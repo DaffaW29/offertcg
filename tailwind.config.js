@@ -13,9 +13,14 @@ module.exports = {
   corePlugins: {
     preflight: false
   },
-  darkMode: "class",
+  darkMode: ["selector", '[data-theme="dark"]'],
   theme: {
     extend: {
+      fontFamily: {
+        display: ["var(--font-display)", "system-ui", "sans-serif"],
+        sans: ["var(--font-sans)", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "monospace"]
+      },
       animation: {
         aurora: "aurora 60s linear infinite"
       },

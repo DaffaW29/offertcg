@@ -73,8 +73,12 @@ import {
   landingCardsForOffset
 } from "./workspace/components/landing-hero";
 import { PortfolioView } from "./workspace/components/portfolio-view";
+import {
+  CheckoutPortfolioPrompt,
+  type CheckoutItemSelection,
+  type CheckoutItemVisibility
+} from "./workspace/components/checkout-portfolio-prompt";
 import { RecentBuysView } from "./workspace/components/recent-buys-view";
-import { WorkspaceTabs } from "./workspace/components/workspace-tabs";
 import {
   DEFAULT_BUY_PERCENT,
   EMPTY_SEARCH_PAGINATION,
@@ -223,10 +227,15 @@ export default function Home() {
   const [nearbyMaxDistance, setNearbyMaxDistance] = useState("50");
   const [nearbySort, setNearbySort] = useState<NearbySort>("distance");
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
   const [globalBuyPercent, setGlobalBuyPercent] =
     useState(DEFAULT_BUY_PERCENT);
   const [pushNoMarketCardsDown, setPushNoMarketCardsDown] = useState(true);
   const [hasHydrated, setHasHydrated] = useState(false);
+  const [showCheckoutPrompt, setShowCheckoutPrompt] = useState(false);
+  const [checkoutLot, setCheckoutLot] = useState<DealLot | null>(null);
+  const [checkoutSelection, setCheckoutSelection] = useState<CheckoutItemSelection>({});
+  const [checkoutVisibility, setCheckoutVisibility] = useState<CheckoutItemVisibility>({});
   const workspaceRef = useRef<HTMLElement>(null);
   const resultListRef = useRef<HTMLDivElement>(null);
   const profilePopoverRef = useRef<HTMLDivElement>(null);
@@ -261,6 +270,22 @@ export default function Home() {
       window.clearTimeout(landingTransitionTimeoutRef.current ?? undefined);
     };
   }, []);
+
+  useEffect(() => {
+    const stored = localStorage.getItem("offertcg-theme");
+    if (stored === "dark" || stored === "light") {
+      document.documentElement.dataset.theme = stored;
+      const frame = window.requestAnimationFrame(() => setTheme(stored));
+      return () => window.cancelAnimationFrame(frame);
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    const next = theme === "light" ? "dark" : "light";
+    setTheme(next);
+    document.documentElement.dataset.theme = next;
+    localStorage.setItem("offertcg-theme", next);
+  };
 
   useEffect(() => {
     if (!supabaseClient) {
@@ -1022,12 +1047,10 @@ export default function Home() {
     setCart([]);
     setActiveTab("recent");
 
-    if (portfolioProfile.autoMirrorDealItems) {
-      addPortfolioImportItems(
-        dealLotToPortfolioItems(lot),
-        "Checked-out cards were added to portfolio."
-      );
-    }
+    setCheckoutLot(lot);
+    setCheckoutSelection({});
+    setCheckoutVisibility({});
+    setShowCheckoutPrompt(true);
 
     if (supabaseClient && session && hasCloudDataLoaded) {
       saveCloudLot(supabaseClient, session.user.id, lot).catch((error: unknown) => {
@@ -1038,6 +1061,39 @@ export default function Home() {
         );
       });
     }
+  }
+
+  function handleCheckoutAddAll() {
+    if (!checkoutLot) return;
+    const items = dealLotToPortfolioItems(checkoutLot).map((item) => ({
+      ...item,
+      isPublic: checkoutVisibility[item.sourceLotItemId ?? ""] !== false
+    }));
+    addPortfolioImportItems(items, "Checked-out cards were added to portfolio.");
+    setShowCheckoutPrompt(false);
+    setCheckoutLot(null);
+  }
+
+  function handleCheckoutAddSelected() {
+    if (!checkoutLot) return;
+    const lotItems = dealLotToPortfolioItems(checkoutLot);
+    const selectedItems = lotItems
+      .filter((item) => checkoutSelection[item.sourceLotItemId ?? ""] !== false)
+      .map((item) => ({
+        ...item,
+        isPublic: checkoutVisibility[item.sourceLotItemId ?? ""] !== false
+      }));
+    addPortfolioImportItems(
+      selectedItems,
+      `Added ${selectedItems.length} card${selectedItems.length === 1 ? "" : "s"} to portfolio.`
+    );
+    setShowCheckoutPrompt(false);
+    setCheckoutLot(null);
+  }
+
+  function handleCheckoutSkip() {
+    setShowCheckoutPrompt(false);
+    setCheckoutLot(null);
   }
 
   function updateSaleDraft(key: string, draft: SaleDraft) {
@@ -1727,7 +1783,11 @@ export default function Home() {
 
       <main className="app-shell" ref={workspaceRef}>
         <AppHeader
-          totals={totals}
+          activeTab={activeTab}
+          recentBuysCount={recentBuys.length}
+          remainingQuantity={portfolioSummary.remainingQuantity}
+          portfolioCount={portfolioWorth.itemCount}
+          theme={theme}
           session={session}
           supabaseEnabled={Boolean(supabaseClient)}
           isProfileOpen={isProfileOpen}
@@ -1739,25 +1799,19 @@ export default function Home() {
           authEmail={authEmail}
           authPassword={authPassword}
           authMessage={authMessage}
-          onToggleProfile={() => setIsProfileOpen((current) => !current)}
-          onAuthEmailChange={setAuthEmail}
-          onAuthPasswordChange={setAuthPassword}
-          onAuthSubmit={(event) => void handleAuthSubmit(event)}
-          onSubmitAuth={(mode) => void submitAuth(mode)}
-          onSignOut={() => void signOut()}
-        />
-
-        <WorkspaceTabs
-          activeTab={activeTab}
-          recentBuysCount={recentBuys.length}
-          remainingQuantity={portfolioSummary.remainingQuantity}
-          portfolioCount={portfolioWorth.itemCount}
           onChangeTab={(tab) => {
             setActiveTab(tab);
             if (tab === "nearby") {
               void refreshPublicPortfolios();
             }
           }}
+          onToggleTheme={toggleTheme}
+          onToggleProfile={() => setIsProfileOpen((current) => !current)}
+          onAuthEmailChange={setAuthEmail}
+          onAuthPasswordChange={setAuthPassword}
+          onAuthSubmit={(event) => void handleAuthSubmit(event)}
+          onSubmitAuth={(mode) => void submitAuth(mode)}
+          onSignOut={() => void signOut()}
         />
 
         {activeTab === "current" ? (
@@ -1932,6 +1986,35 @@ export default function Home() {
           />
         )}
       </main>
+
+      {showCheckoutPrompt && checkoutLot ? (
+        <CheckoutPortfolioPrompt
+          lot={checkoutLot}
+          selection={checkoutSelection}
+          visibility={checkoutVisibility}
+          onToggleSelection={(itemId) =>
+            setCheckoutSelection((current) => ({
+              ...current,
+              [itemId]: current[itemId] === false
+            }))
+          }
+          onToggleVisibility={(itemId) =>
+            setCheckoutVisibility((current) => ({
+              ...current,
+              [itemId]: current[itemId] === false
+            }))
+          }
+          onSelectAll={() => setCheckoutSelection({})}
+          onDeselectAll={() => {
+            const allOff: CheckoutItemSelection = {};
+            checkoutLot.items.forEach((item) => { allOff[item.id] = false; });
+            setCheckoutSelection(allOff);
+          }}
+          onAddAll={handleCheckoutAddAll}
+          onAddSelected={handleCheckoutAddSelected}
+          onSkip={handleCheckoutSkip}
+        />
+      ) : null}
     </>
   );
 }

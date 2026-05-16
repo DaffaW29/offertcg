@@ -1,18 +1,19 @@
 import type { Metadata } from "next";
-import { Fira_Code, Fira_Sans } from "next/font/google";
+import { Bricolage_Grotesque, JetBrains_Mono } from "next/font/google";
+import { GeistSans } from "geist/font/sans";
 import "./globals.css";
 
-const firaSans = Fira_Sans({
+const bricolage = Bricolage_Grotesque({
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
-  variable: "--font-fira-sans",
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-display",
   display: "swap"
 });
 
-const firaCode = Fira_Code({
+const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
-  variable: "--font-fira-code",
+  variable: "--font-mono",
   display: "swap"
 });
 
@@ -28,7 +29,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${firaSans.variable} ${firaCode.variable}`}>
+      <body className={`${bricolage.variable} ${GeistSans.variable} ${jetbrainsMono.variable}`}>
         {children}
       </body>
     </html>

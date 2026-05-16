@@ -21,7 +21,6 @@ import {
   effectiveMarketPrice,
   roundCurrency,
   suggestedBuyPrice,
-  totalPayout,
   type CardCondition,
   type DealItem
 } from "@/lib/deals";
@@ -38,7 +37,14 @@ import {
 } from "../formatters";
 import { getSelectedVariant } from "../search";
 import type { DealCartTotals, SearchPagination } from "../types";
-import { CardThumb } from "./primitives";
+import {
+  CardThumb,
+  KPICard,
+  RarityDot,
+  ScreenBanner,
+  SectionHeader,
+  SpreadBar
+} from "./primitives";
 
 export function CurrentDealView({
   query,
@@ -123,14 +129,29 @@ export function CurrentDealView({
 }) {
   return (
     <>
-      <section className="search-panel">
-        <form className="search-form" onSubmit={onSearch}>
-          <div className="search-main">
-            <label htmlFor="card-search">Card search</label>
+      <ScreenBanner
+        eyebrow="Vendor Buy Tool"
+        title="Price the buy."
+        titleAccent="Pay the right spread."
+        subtitle="Search the live catalog, pick the exact print, dial in your global buy %, and watch the deal cart price itself in real time."
+        kpis={
+          <>
+            <KPICard label="Market value" value={formatCurrency(totals.marketValue)} sub="Sum of selected cards" />
+            <KPICard label="Suggested payout" value={formatCurrency(totals.payout)} sub={`At ${globalBuyPercent}% global`} accent />
+            <KPICard label="Cards" value={totals.quantity.toString()} sub="In current deal" />
+          </>
+        }
+      />
+
+      <form className="surface" style={{ padding: 18, marginBottom: 18 }} onSubmit={onSearch}>
+        <div className="search-grid">
+          <div>
+            <label className="field-label" htmlFor="card-search">Card search</label>
             <div className="search-input-wrap">
-              <Search aria-hidden="true" size={22} />
+              <Search aria-hidden="true" size={16} />
               <input
                 id="card-search"
+                className="input input-search"
                 value={query}
                 onChange={(event) => onQueryChange(event.target.value)}
                 placeholder="Charizard ex, Pikachu, Umbreon VMAX..."
@@ -139,114 +160,105 @@ export function CurrentDealView({
               {query ? (
                 <button
                   aria-label="Clear search"
-                  className="icon-button"
+                  className="input-clear"
                   type="button"
                   onClick={() => onQueryChange("")}
                 >
-                  <X size={18} />
+                  <X size={14} />
                 </button>
               ) : null}
             </div>
           </div>
-
-          <div className="filter-grid">
-            <label>
-              Set name
-              <input
-                value={setName}
-                onChange={(event) => onSetNameChange(event.target.value)}
-                placeholder="Obsidian Flames"
-              />
-            </label>
-            <label>
-              Card number
-              <input
-                value={cardNumber}
-                onChange={(event) => onCardNumberChange(event.target.value)}
-                placeholder="125/197"
-              />
-            </label>
-            <label>
-              Rarity
-              <input
-                value={rarity}
-                onChange={(event) => onRarityChange(event.target.value)}
-                placeholder="Special Illustration Rare"
-              />
-            </label>
-            <label>
-              Add condition
-              <select
-                value={addCondition}
-                onChange={(event) =>
-                  onAddConditionChange(event.target.value as CardCondition)
-                }
-              >
-                {CONDITIONS.map((condition) => (
-                  <option key={condition} value={condition}>
-                    {condition}
-                  </option>
-                ))}
-              </select>
-            </label>
+          <div>
+            <label className="field-label">Set</label>
+            <input
+              className="input"
+              value={setName}
+              onChange={(event) => onSetNameChange(event.target.value)}
+              placeholder="Obsidian Flames"
+            />
           </div>
-
-          <button className="primary-button" type="submit" disabled={isSearching}>
-            {isSearching ? (
-              <Loader2 className="spin" size={18} />
-            ) : (
-              <Search size={18} />
-            )}
+          <div>
+            <label className="field-label">Number</label>
+            <input
+              className="input"
+              value={cardNumber}
+              onChange={(event) => onCardNumberChange(event.target.value)}
+              placeholder="125/197"
+            />
+          </div>
+          <div>
+            <label className="field-label">Rarity</label>
+            <input
+              className="input"
+              value={rarity}
+              onChange={(event) => onRarityChange(event.target.value)}
+              placeholder="Special Illustration Rare"
+            />
+          </div>
+          <div>
+            <label className="field-label">Condition</label>
+            <select
+              className="select"
+              value={addCondition}
+              onChange={(event) =>
+                onAddConditionChange(event.target.value as CardCondition)
+              }
+            >
+              {CONDITIONS.map((condition) => (
+                <option key={condition} value={condition}>
+                  {condition}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button className="btn btn-primary" type="submit" disabled={isSearching} style={{ alignSelf: "end", height: 40 }}>
+            {isSearching ? <Loader2 className="spin" size={14} /> : <Search size={14} />}
             Search prices
           </button>
-        </form>
-
-        <div className="search-options" aria-label="Search result options">
-          <label className="toggle-option">
-            <input
-              type="checkbox"
-              checked={pushNoMarketCardsDown}
-              onChange={(event) =>
-                onPushNoMarketCardsDownChange(event.target.checked)
-              }
-            />
-            <span>Push no-market cards down</span>
-          </label>
         </div>
+        <label className="toggle-option" style={{ marginTop: 14 }}>
+          <input
+            type="checkbox"
+            checked={pushNoMarketCardsDown}
+            onChange={(event) =>
+              onPushNoMarketCardsDownChange(event.target.checked)
+            }
+          />
+          <span>Push no-market cards down the list</span>
+        </label>
+      </form>
 
-        {searchError ? <p className="status-message error">{searchError}</p> : null}
-        {providerNotice ? (
-          <p className="status-message warning">{providerNotice}</p>
-        ) : null}
-      </section>
+      {searchError ? <p className="status-message error">{searchError}</p> : null}
+      {providerNotice ? <p className="status-message warning">{providerNotice}</p> : null}
 
-      <section className="workspace-grid">
-        <section className="panel results-panel" aria-labelledby="results-heading">
-          <div className="panel-heading">
-            <div>
-              <p className="eyebrow">Search results</p>
-              <h2 id="results-heading">Select the exact card</h2>
-            </div>
-            <span className="count-pill">
-              {hasSearched ? pagination.totalCount : 0} results
-            </span>
-          </div>
+      <div className="workspace-grid">
+        <section className="surface" style={{ padding: 20 }} aria-labelledby="results-heading">
+          <SectionHeader
+            eyebrow="Search Results"
+            title="Select the exact card"
+            right={
+              <span className="chip">
+                {hasSearched ? pagination.totalCount : 0} results
+              </span>
+            }
+          />
 
           {isSearching ? (
-            <div className="empty-state">
+            <div className="empty">
               <Loader2 className="spin" size={24} />
-              <span>Looking up current prices...</span>
+              <span style={{ marginTop: 8 }}>Looking up current prices...</span>
             </div>
           ) : null}
 
           {!isSearching && hasSearched && displayedResults.length === 0 && !searchError ? (
-            <div className="empty-state">
+            <div className="empty">
               <span>No matching cards found. Try a shorter name or clear filters.</span>
             </div>
           ) : null}
 
           {!isSearching && !hasSearched ? (
-            <div className="empty-state">
+            <div className="empty">
               <span>Search by card name to start a deal.</span>
             </div>
           ) : null}
@@ -257,65 +269,63 @@ export function CurrentDealView({
                 card,
                 selectedVariants[card.id]
               );
+              const inCart = cart.some((item) => item.providerCardId === card.id);
 
               return (
                 <article className="result-card" key={card.id}>
                   <CardThumb card={card} />
                   <div className="result-details">
-                    <div>
-                      <h3>{card.name}</h3>
-                      <p>
-                        {card.setName} #{card.cardNumber}
-                      </p>
-                      <p className="muted">
-                        {card.rarity} · Source: {sourceLabel(card.priceSource)}
-                      </p>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 2 }}>
+                      <h3 style={{ fontWeight: 700, fontSize: 15, margin: 0 }}>{card.name}</h3>
+                      <RarityDot rarity={card.rarity} />
                     </div>
+                    <p className="text-sm text-2" style={{ marginBottom: 8 }}>
+                      {card.setName} #{card.cardNumber} · <span className="text-3">{sourceLabel(card.priceSource)}</span>
+                    </p>
                     <div className="result-controls">
-                      <label>
-                        Version
-                        <select
-                          value={selectedVariant?.id ?? ""}
-                          onChange={(event) =>
-                            onSelectedVariantsChange((current) => ({
-                              ...current,
-                              [card.id]: event.target.value
-                            }))
-                          }
-                        >
-                          {card.variants.map((variant) => (
-                            <option key={variant.id} value={variant.id}>
-                              {variant.label} ·{" "}
-                              {variant.marketPrice === null
-                                ? "No market"
-                                : formatCurrency(variant.marketPrice)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <div className="result-price">
-                        <span>Market</span>
-                        <strong>
-                          {selectedVariant?.marketPrice === null ||
-                          selectedVariant === undefined
+                      <select
+                        className="select"
+                        style={{ height: 34, fontSize: 12 }}
+                        value={selectedVariant?.id ?? ""}
+                        onChange={(event) =>
+                          onSelectedVariantsChange((current) => ({
+                            ...current,
+                            [card.id]: event.target.value
+                          }))
+                        }
+                      >
+                        {card.variants.map((variant) => (
+                          <option key={variant.id} value={variant.id}>
+                            {variant.label} ·{" "}
+                            {variant.marketPrice === null
+                              ? "No market"
+                              : formatCurrency(variant.marketPrice)}
+                          </option>
+                        ))}
+                      </select>
+                      <div style={{ textAlign: "right" }}>
+                        <div className="text-xs text-3" style={{ letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600 }}>Market</div>
+                        <div className="mono" style={{ fontWeight: 700, fontSize: 15 }}>
+                          {selectedVariant?.marketPrice === null || selectedVariant === undefined
                             ? "Manual"
                             : formatCurrency(selectedVariant.marketPrice)}
-                        </strong>
+                        </div>
                       </div>
                       <button
-                        className="secondary-button"
+                        className="btn btn-soft btn-sm"
                         type="button"
                         onClick={() => onAddCard(card)}
+                        disabled={inCart}
                       >
-                        <Plus size={17} />
-                        Add
+                        <Plus size={12} />
+                        {inCart ? "Added" : "Add"}
                       </button>
                     </div>
                     <div className="result-meta">
                       <span>{formatPriceDate(card.lastUpdated)}</span>
                       {card.externalUrl ? (
-                        <a href={card.externalUrl} target="_blank" rel="noreferrer">
-                          View source
+                        <a href={card.externalUrl} target="_blank" rel="noreferrer" style={{ fontWeight: 600 }}>
+                          View source →
                         </a>
                       ) : null}
                     </div>
@@ -327,95 +337,79 @@ export function CurrentDealView({
 
           {hasPagedResults ? (
             <div className="pagination-bar">
-              <span aria-live="polite">
+              <span className="text-xs text-3">
                 Showing {resultStart}-{resultEnd} of {pagination.totalCount}
               </span>
               <div className="pagination-controls">
                 <button
-                  className="ghost-button"
+                  className="btn btn-ghost btn-sm"
                   type="button"
                   onClick={() => onGoToSearchPage(pagination.page - 1)}
                   disabled={!canGoPrevious || isSearching}
                 >
-                  <ChevronLeft size={16} />
+                  <ChevronLeft size={14} />
                   Previous
                 </button>
-                <span>
+                <span className="chip">
                   Page {pagination.page} of {totalPages}
                 </span>
                 <button
-                  className="ghost-button"
+                  className="btn btn-ghost btn-sm"
                   type="button"
                   onClick={() => onGoToSearchPage(pagination.page + 1)}
                   disabled={!canGoNext || isSearching}
                 >
                   Next
-                  <ChevronRight size={16} />
+                  <ChevronRight size={14} />
                 </button>
               </div>
             </div>
           ) : null}
         </section>
 
-        <section className="panel cart-panel" aria-labelledby="cart-heading">
-          <div className="panel-heading cart-heading">
-            <div>
-              <p className="eyebrow">Deal cart</p>
-              <h2 id="cart-heading">Suggested payout</h2>
-            </div>
-            <div className="cart-actions">
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={onCheckoutCart}
-                disabled={cart.length === 0}
-              >
-                <CheckCircle size={17} />
-                Checkout
-              </button>
-              <button
-                className="ghost-button"
-                type="button"
-                onClick={onExportCsv}
-                disabled={cart.length === 0}
-              >
-                <Download size={17} />
-                CSV
-              </button>
-              <button
-                className="ghost-button danger"
-                type="button"
-                onClick={onClearCart}
-                disabled={cart.length === 0}
-              >
-                <Trash2 size={17} />
-                Clear
-              </button>
-            </div>
-          </div>
+        <section className="surface" style={{ padding: 20 }} aria-labelledby="cart-heading">
+          <SectionHeader
+            eyebrow="Deal Cart"
+            title="Suggested payout"
+            right={
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  className="btn btn-soft btn-sm"
+                  type="button"
+                  onClick={onCheckoutCart}
+                  disabled={cart.length === 0}
+                >
+                  <CheckCircle size={12} /> Checkout
+                </button>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  type="button"
+                  onClick={onExportCsv}
+                  disabled={cart.length === 0}
+                >
+                  <Download size={12} /> CSV
+                </button>
+                <button
+                  className="btn btn-danger btn-sm"
+                  type="button"
+                  onClick={onClearCart}
+                  disabled={cart.length === 0}
+                >
+                  <Trash2 size={12} /> Clear
+                </button>
+              </div>
+            }
+          />
 
-          <div className="percent-toolbar" aria-label="Buy percentage controls">
-            <label>
-              Global buy %
-              <input
-                className="percent-input"
-                type="number"
-                min="1"
-                max="100"
-                step="1"
-                value={globalBuyPercent}
-                onChange={(event) =>
-                  onApplyGlobalPercent(Number(event.target.value))
-                }
-              />
-            </label>
-            <div className="quick-buttons">
+          <div style={{ marginBottom: 18 }}>
+            <div className="field-label" style={{ marginBottom: 8 }}>Global buy %</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               {QUICK_PERCENTAGES.map((percent) => (
                 <button
-                  className={percent === globalBuyPercent ? "active" : ""}
                   key={percent}
                   type="button"
                   onClick={() => onApplyGlobalPercent(percent)}
+                  className={`percent-chip${percent === globalBuyPercent ? " active" : ""}`}
                 >
                   {percent}%
                 </button>
@@ -423,171 +417,164 @@ export function CurrentDealView({
             </div>
           </div>
 
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Card</th>
-                  <th>Condition</th>
-                  <th>Market</th>
-                  <th>Buy %</th>
-                  <th>Qty</th>
-                  <th>Each</th>
-                  <th>Total</th>
-                  <th aria-label="Actions" />
-                </tr>
-              </thead>
-              <tbody>
-                {cart.length === 0 ? (
-                  <tr>
-                    <td className="empty-row" colSpan={8}>
-                      Add cards from search results to price a deal.
-                    </td>
-                  </tr>
-                ) : null}
-                {cart.map((item) => (
-                  <tr key={item.id}>
-                    <td className="deal-card-cell">
-                      <CardThumb card={item} compact />
-                      <div>
-                        <strong>{item.name}</strong>
-                        <span>
-                          {item.setName} #{item.cardNumber}
-                        </span>
-                        <span className="muted">
-                          {item.variantLabel} · {item.rarity}
-                        </span>
-                        <input
-                          className="notes-input"
-                          value={item.notes}
-                          onChange={(event) =>
-                            onUpdateCartItem(item.id, (current) => ({
-                              ...current,
-                              notes: event.target.value
-                            }))
-                          }
-                          placeholder="Notes"
-                        />
-                      </div>
-                    </td>
-                    <td>
-                      <select
-                        value={item.condition}
-                        onChange={(event) =>
-                          onUpdateCartItem(item.id, (current) => ({
-                            ...current,
-                            condition: event.target.value as CardCondition
-                          }))
-                        }
-                      >
-                        {CONDITIONS.map((condition) => (
-                          <option key={condition} value={condition}>
-                            {condition}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>
-                      <div className="price-stack">
-                        <strong>{formatCurrency(effectiveMarketPrice(item))}</strong>
-                        <span>
-                          {item.marketPriceMissing
-                            ? "No market"
-                            : `Market ${formatCurrency(item.marketPrice)}`}
-                        </span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={item.manualMarketPrice ?? ""}
-                          onChange={(event) =>
-                            onUpdateCartItem(item.id, (current) => ({
-                              ...current,
-                              manualMarketPrice:
-                                event.target.value === ""
-                                  ? undefined
-                                  : roundCurrency(Number(event.target.value))
-                            }))
-                          }
-                          placeholder="Override"
-                        />
-                      </div>
-                    </td>
-                    <td>
-                      <input
-                        className="small-number"
-                        type="number"
-                        min="1"
-                        max="100"
-                        step="1"
-                        value={item.buyPercent}
-                        onChange={(event) =>
-                          onUpdateCartItem(item.id, (current) => ({
-                            ...current,
-                            buyPercent: clampPercent(Number(event.target.value))
-                          }))
-                        }
-                      />
-                    </td>
-                    <td>
-                      <input
-                        className="small-number"
-                        type="number"
-                        min="1"
-                        step="1"
-                        value={item.quantity}
-                        onChange={(event) =>
-                          onUpdateCartItem(item.id, (current) => ({
-                            ...current,
-                            quantity: Math.max(
-                              1,
-                              Math.floor(Number(event.target.value) || 1)
-                            )
-                          }))
-                        }
-                      />
-                    </td>
-                    <td>{formatCurrency(suggestedBuyPrice(item))}</td>
-                    <td>
-                      <strong>{formatCurrency(totalPayout(item))}</strong>
-                    </td>
-                    <td>
-                      <button
-                        aria-label={`Remove ${item.name}`}
-                        className="icon-button danger"
-                        type="button"
-                        onClick={() => onRemoveCartItem(item.id)}
-                      >
-                        <Trash2 size={17} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td colSpan={4}>Totals</td>
-                  <td>{totals.quantity}</td>
-                  <td>{formatCurrency(totals.marketValue)}</td>
-                  <td>{formatCurrency(totals.payout)}</td>
-                  <td />
-                </tr>
-              </tfoot>
-            </table>
+          <div className="deal-table">
+            <div className="deal-table-header">
+              <div>Card</div>
+              <div>Condition</div>
+              <div>Market</div>
+              <div style={{ textAlign: "right" }}>Buy %</div>
+              <div style={{ textAlign: "right" }}>Qty</div>
+              <div style={{ textAlign: "right" }}>Each</div>
+            </div>
+
+            {cart.length === 0 ? (
+              <div className="empty" style={{ padding: "32px 0" }}>
+                <span>Add cards from search results to price a deal.</span>
+              </div>
+            ) : null}
+
+            {cart.map((item) => {
+              const each = suggestedBuyPrice(item);
+              const market = effectiveMarketPrice(item);
+              return (
+                <div key={item.id} className="deal-table-row">
+                  <div className="deal-card-cell">
+                    <CardThumb card={item} compact />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 13, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.name}</div>
+                      <div className="text-xs text-3" style={{ marginBottom: 4 }}>{item.setName} #{item.cardNumber}</div>
+                      <RarityDot rarity={item.rarity} />
+                    </div>
+                  </div>
+                  <div>
+                    <select
+                      className="select"
+                      style={{ height: 30, fontSize: 12 }}
+                      value={item.condition}
+                      onChange={(event) =>
+                        onUpdateCartItem(item.id, (current) => ({
+                          ...current,
+                          condition: event.target.value as CardCondition
+                        }))
+                      }
+                    >
+                      {CONDITIONS.map((condition) => (
+                        <option key={condition} value={condition}>
+                          {condition}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <div className="mono" style={{ fontWeight: 700, fontSize: 13 }}>{formatCurrency(market)}</div>
+                    <div className="text-xs text-3">
+                      {item.marketPriceMissing ? "No market" : `Market ${formatCurrency(item.marketPrice)}`}
+                    </div>
+                    <SpreadBar market={market} buyPct={item.buyPercent} />
+                    <input
+                      className="input mono"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      style={{ height: 26, padding: "0 6px", fontSize: 11, marginTop: 4, width: "100%" }}
+                      value={item.manualMarketPrice ?? ""}
+                      onChange={(event) =>
+                        onUpdateCartItem(item.id, (current) => ({
+                          ...current,
+                          manualMarketPrice:
+                            event.target.value === ""
+                              ? undefined
+                              : roundCurrency(Number(event.target.value))
+                        }))
+                      }
+                      placeholder="Override"
+                    />
+                  </div>
+                  <div>
+                    <input
+                      className="input mono"
+                      type="number"
+                      min="1"
+                      max="100"
+                      step="1"
+                      style={{ height: 30, padding: "0 8px", textAlign: "right", fontSize: 12, width: 64 }}
+                      value={item.buyPercent}
+                      onChange={(event) =>
+                        onUpdateCartItem(item.id, (current) => ({
+                          ...current,
+                          buyPercent: clampPercent(Number(event.target.value))
+                        }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <input
+                      className="input mono"
+                      type="number"
+                      min="1"
+                      step="1"
+                      style={{ height: 30, padding: "0 8px", textAlign: "right", fontSize: 12, width: 56 }}
+                      value={item.quantity}
+                      onChange={(event) =>
+                        onUpdateCartItem(item.id, (current) => ({
+                          ...current,
+                          quantity: Math.max(1, Math.floor(Number(event.target.value) || 1))
+                        }))
+                      }
+                    />
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div className="mono" style={{ fontWeight: 700, fontSize: 14, color: "var(--accent)" }}>
+                      {formatCurrency(each)}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onRemoveCartItem(item.id)}
+                      style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginTop: 2 }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {cart.length > 0 ? (
+              <div className="deal-table-totals">
+                <div style={{ fontWeight: 800, fontSize: 16 }}>Totals</div>
+                <div />
+                <div />
+                <div />
+                <div className="mono" style={{ textAlign: "right", fontWeight: 700, fontSize: 14 }}>
+                  {totals.quantity}
+                </div>
+                <div className="mono" style={{ textAlign: "right", fontWeight: 800, fontSize: 18, color: "var(--accent)" }}>
+                  {formatCurrency(totals.payout)}
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {cart.length > 0 ? (
-            <button
-              className="reset-button"
-              type="button"
-              onClick={() => onApplyGlobalPercent(DEFAULT_BUY_PERCENT)}
-            >
-              <RotateCcw size={16} />
-              Reset all cards to {DEFAULT_BUY_PERCENT}%
-            </button>
+            <div style={{ marginTop: 18, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <button
+                className="btn btn-ghost btn-sm"
+                type="button"
+                onClick={() => onApplyGlobalPercent(DEFAULT_BUY_PERCENT)}
+              >
+                <RotateCcw size={12} />
+                Reset all to {DEFAULT_BUY_PERCENT}%
+              </button>
+              <div className="text-xs text-3">
+                Spread captured:{" "}
+                <span className="mono" style={{ fontWeight: 700, color: "var(--pos)" }}>
+                  {formatCurrency(totals.marketValue - totals.payout)}
+                </span>
+              </div>
+            </div>
           ) : null}
         </section>
-      </section>
+      </div>
     </>
   );
 }
